@@ -14,17 +14,23 @@ jobs:
         uses: microsoft/setup-msbuild@v2
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+      - name: Restore packages
+        run: dotnet restore src\NotifyClient\NotifyClient.csproj
       - name: Build x86 Release
         run: msbuild src\NotifyClient\NotifyClient.csproj /p:Configuration=Release /p:Platform=x86 /t:Rebuild
       - name: Show output
         shell: pwsh
         run: |
-          Get-ChildItem src\NotifyClient\bin\Release\
-          $exe = "src\NotifyClient\bin\Release\NotifyClient.exe"
-          if (Test-Path $exe) { (Get-Item $exe).Length }
+          Get-ChildItem src\NotifyClient\bin\ -Recurse -Filter NotifyClient.exe
+          $exe = Get-ChildItem src\NotifyClient\bin\ -Recurse -Filter NotifyClient.exe | Select-Object -First 1
+          if ($exe) { $exe.Length; $exe.FullName }
       - name: Upload exe
         uses: actions/upload-artifact@v4
         with:
           name: NotifyClient-win7-x86
-          path: src/NotifyClient/bin/Release/NotifyClient.exe
+          path: src/NotifyClient/bin/**/NotifyClient.exe
           if-no-files-found: error
