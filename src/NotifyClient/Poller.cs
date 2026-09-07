@@ -19,7 +19,7 @@ static class Poller
                 try
                 {
                     // 3072 = TLS1.2 (avoid enum dep for old csc), 768 = TLS1.1
-                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)(3072 | 768 | SecurityProtocolType.Ssl3 | SecurityProtocolType.Tls);
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)(3072 | 768 | (int)SecurityProtocolType.Ssl3 | (int)SecurityProtocolType.Tls);
                 }
                 catch { }
                 tlsInit = true;
