@@ -1,0 +1,30 @@
+name: Build NotifyClient (Win7 x86)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+      - name: Build x86 Release
+        run: msbuild src\NotifyClient\NotifyClient.csproj /p:Configuration=Release /p:Platform=x86 /t:Rebuild
+      - name: Show output
+        shell: pwsh
+        run: |
+          Get-ChildItem src\NotifyClient\bin\Release\
+          $exe = "src\NotifyClient\bin\Release\NotifyClient.exe"
+          if (Test-Path $exe) { (Get-Item $exe).Length }
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: NotifyClient-win7-x86
+          path: src/NotifyClient/bin/Release/NotifyClient.exe
+          if-no-files-found: error
