@@ -4,3 +4,28 @@
 LANGUAGE LANG_NEUTRAL, SUBLANG_NEUTRAL
 IDI_APPICON ICON DISCARDABLE "app.ico"
 1 RT_MANIFEST "app.manifest"
+
+1 VERSIONINFO
+FILEVERSION 3,0,0,0
+PRODUCTVERSION 3,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "FileDescription", "NotifyClient native Win7 tray client"
+            VALUE "FileVersion", "3.0.0"
+            VALUE "ProductName", "NotifyClient"
+            VALUE "ProductVersion", "3.0.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x804, 1200
+    END
+END

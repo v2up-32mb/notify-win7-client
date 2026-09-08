@@ -7,6 +7,6 @@ using System.Runtime.InteropServices;
 [assembly: AssemblyCompany("")]
 [assembly: AssemblyProduct("NotifyClient")]
 [assembly: AssemblyCopyright("MIT")]
-[assembly: AssemblyVersion("2.0.7")]
-[assembly: AssemblyFileVersion("2.0.7")]
+[assembly: AssemblyVersion("3.0.0")]
+[assembly: AssemblyFileVersion("3.0.0")]
 [assembly: ComVisible(false)]

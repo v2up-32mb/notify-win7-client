@@ -1,0 +1,115 @@
+name: Release Joint (v3)
+
+# Joint release: C# client + native client + bundled worker, all in one Release.
+# Push a v3.* tag (e.g. v3.0.0) to publish. C#-only v2.* tags still use build.yml.
+on:
+  push:
+    tags: ['v3*']
+
+permissions:
+  contents: write
+
+jobs:
+  build-csharp:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.x
+      - name: Restore packages
+        run: dotnet restore src\NotifyClient\NotifyClient.csproj
+      - name: Build x86 Release
+        run: msbuild src\NotifyClient\NotifyClient.csproj /p:Configuration=Release /p:Platform=x86 /t:Rebuild
+      - name: Stage exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force rel | Out-Null
+          $exe = Get-ChildItem src\NotifyClient\bin\ -Recurse -Filter NotifyClient.exe | Select-Object -First 1
+          Copy-Item $exe.FullName rel\NotifyClient.exe
+      - name: Upload staged exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: rel-csharp
+          path: rel/NotifyClient.exe
+          if-no-files-found: error
+
+  build-native:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup MSVC x86
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Compile resources
+        working-directory: native
+        shell: cmd
+        run: rc /nologo /fo app.res app.rc
+      - name: Compile (MSVC x86 /MT, Win7 API level)
+        working-directory: native
+        shell: cmd
+        run: cl /nologo /utf-8 /MT /O1 /Os /DUNICODE /D_UNICODE /DWIN32 /D_WIN32_WINNT=0x0601 /DWINVER=0x0601 /EHsc /GR- /W3 /Fe:NotifyClientNative.exe main.cpp toast.cpp poll.cpp cfg.cpp app.res /link /SUBSYSTEM:WINDOWS /MACHINE:X86 /OPT:REF /OPT:ICF user32.lib gdi32.lib comctl32.lib winhttp.lib shell32.lib psapi.lib advapi32.lib
+      - name: Stage exe
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force rel | Out-Null
+          Copy-Item native\NotifyClientNative.exe rel\NotifyClientNative.exe
+      - name: Upload staged exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: rel-native
+          path: rel/NotifyClientNative.exe
+          if-no-files-found: error
+
+  bundle-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Bundle worker (wrangler dry-run, no deploy)
+        run: |
+          cd server
+          npx -y wrangler@3 deploy --dry-run --outdir ../dist-worker
+          echo '--- dist-worker ---'
+          find ../dist-worker -type f | head -n 20
+      - name: Stage bundle as _worker.js
+        run: |
+          mkdir -p rel
+          BUNDLE=$(find dist-worker -name '*.js' -not -name '*.map' | head -n 1)
+          test -n "$BUNDLE"
+          cp "$BUNDLE" rel/_worker.js
+          ls -la rel/
+      - name: Upload staged bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: rel-worker
+          path: rel/_worker.js
+          if-no-files-found: error
+
+  release:
+    runs-on: ubuntu-latest
+    needs: [build-csharp, build-native, bundle-worker]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all staged files
+        uses: actions/download-artifact@v4
+        with:
+          pattern: rel-*
+          merge-multiple: true
+          path: rel
+      - name: List release files
+        run: ls -la rel/
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rel/*
+          body_path: RELEASE_NOTES.md

@@ -1,0 +1,67 @@
+{
+  "name": "notify-center",
+  "version": "2.1.0",
+  "description": "C/S 起泡通知系统 S 端 API。AI/开发者阅读本文件 + 持有对应 token，即可编写生产者或消费者。",
+  "base_urls": {
+    "cloud": "https://<你的worker>.workers.dev",
+    "local": "http://127.0.0.1:8765"
+  },
+  "auth": {
+    "summary": "三级 Bearer Token，请求头 Authorization: Bearer <token>。KV 存 sha256 用于校验，同时保存明文供管理后台展示（与 ADMIN_TOKEN 同一信任级别）。",
+    "schemes": [
+      { "kind": "admin", "prefix": "adm_", "how": "本地看 client/.admin_token；线上 wrangler secret put ADMIN_TOKEN", "can": ["配发/轮换/吊销身份", "发送消息", "拉取全部消息", "清空消息"] },
+      { "kind": "producer", "prefix": "ps_", "how": "管理员配发：POST /api/admin/producers", "can": ["发送消息"] },
+      { "kind": "client", "prefix": "cs_", "how": "管理员配发并绑定分组：POST /api/admin/clients", "can": ["拉取自己可见范围的消息"] }
+    ],
+    "enforcement": "未配发任何 producer 时发送开放；未配发任何 client 时拉取开放（一律广播）。配发后自动强制，无 token 调 401。",
+    "errors": { "401": "token 缺失/错误/越权（生产者调拉取、客户端调发送也会 401）" }
+  },
+  "message": {
+    "fields": {
+      "id": "毫秒时间戳-随机hex，天然排序，拉取游标",
+      "title": "标题 ≤100 字",
+      "body": "正文 ≤2000 字",
+      "level": "info | success | warn | error（决定气泡颜色）",
+      "tag": "可选标签",
+      "to": "{all:bool, groups:[], clients:[]} 投递范围，可组合",
+      "from": "发送者名（S 端自动填，客户端伪造无效）",
+      "ts": "毫秒时间戳"
+    },
+    "targeting": "发送时三选一：{\"to_all\":true} 广播；{\"to_groups\":[\"运维\"]} 分组；{\"to_clients\":[\"pc-01\"]} 点对点。兼容老字段 target（\"all\"=广播，否则按单组理解）。",
+    "visibility": "客户端可见 ⇔ 广播 / 自己所在组命中（组归属由 S 端绑定，客户端自报无效） / 自己被点名。admin 全可见。"
+  },
+  "polling": "消费者轮询 GET /api/messages?since=<last_id>&limit=50，首次不带 since 取最近 N 条，之后每次用返回消息的最后一条 id 当 since。服务端也回 latest 兜底。",
+  "endpoints": [
+    { "method": "GET", "path": "/health", "auth": "无", "summary": "健康检查 + 认证模式", "response": {"ok": true, "service": "notify-center", "auth_enforced": {"post": false, "get": false}} },
+    { "method": "GET", "path": "/admin", "auth": "无（页面内再登录）", "summary": "浏览器管理后台", "response": "HTML" },
+    { "method": "GET", "path": "/api/spec", "auth": "无", "summary": "本文件（JSON，给 AI/程序读）", "response": "本 JSON" },
+    { "method": "GET", "path": "/api/spec.md", "auth": "无", "summary": "接口文档（Markdown，给人粘进 AI 聊天框）", "response": "Markdown 文本" },
+    { "method": "POST", "path": "/api/messages", "auth": "强制后需 producer/admin", "summary": "发送消息",
+      "body": {"title": "通知", "body": "正文", "level": "info", "tag": "", "to_all": true, "to_groups": ["运维"], "to_clients": ["pc-01"]},
+      "response": {"ok": true, "msg": {"id": "…", "title": "…", "to": {"all": true}}} },
+    { "method": "GET", "path": "/api/messages?since=<id>&limit=50", "auth": "强制后需 client/admin", "summary": "拉取新消息（只返回调用者可见范围）",
+      "response": {"ok": true, "messages": [], "count": 0, "latest": "", "you": {"kind": "client", "id": "pc-01", "groups": ["运维"]}} },
+    { "method": "POST", "path": "/api/ack", "auth": "无", "summary": "已读确认（预留，去重以 since 游标为准）", "response": {"ok": true} },
+    { "method": "DELETE", "path": "/api/messages?confirm=yes", "auth": "admin", "summary": "清空消息", "response": {"ok": true, "cleared": 3} },
+    { "method": "POST", "path": "/api/admin/producers", "auth": "admin", "summary": "配发生产者（?rotate=yes 换令牌）", "body": {"name": "监控系统"}, "response": {"ok": true, "name": "监控系统", "token": "ps_…"} },
+    { "method": "PUT", "path": "/api/admin/producers", "auth": "admin", "summary": "编辑生产者：改名 / 换令牌", "body": {"name": "监控系统", "new_name": "新名字", "rotate": true}, "response": {"ok": true, "name": "新名字", "token": "ps_…"} },
+    { "method": "DELETE", "path": "/api/admin/producers?name=<name>", "auth": "admin", "summary": "删除生产者（令牌立即失效）", "response": {"ok": true, "revoked": "监控系统"} },
+    { "method": "POST", "path": "/api/admin/clients[?rotate=yes]", "auth": "admin", "summary": "配发/轮换客户端（绑定分组）", "body": {"client_id": "pc-01", "groups": ["运维", "值班"]}, "response": {"ok": true, "client_id": "pc-01", "groups": ["运维"], "secret": "cs_…"} },
+    { "method": "DELETE", "path": "/api/admin/clients?id=<id>", "auth": "admin", "summary": "吊销客户端", "response": {"ok": true, "revoked": "pc-01"} },
+    { "method": "GET", "path": "/api/admin/overview", "auth": "admin", "summary": "概况（含全部密钥/令牌，可随时查看复制）", "response": {"ok": true, "messages": 10, "clients": [{"id": "pc-01", "groups": ["运维"], "secret": "cs_…"}], "producers": [{"name": "监控系统", "token": "ps_…"}]} }
+  ],
+  "examples": [
+    { "id": "curl-producer", "title": "生产者：curl 发送（分组定向）", "lang": "bash",
+      "code": "curl -X POST {{BASE}}/api/messages \\\n  -H \"Authorization: Bearer {{PRODUCER_TOKEN}}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"title\":\"机房着火\",\"body\":\"3F 机柜冒烟，速来\",\"level\":\"error\",\"to_groups\":[\"运维\"]}'" },
+    { "id": "curl-consumer", "title": "消费者：curl 轮询", "lang": "bash",
+      "code": "curl -s \"{{BASE}}/api/messages?since=&limit=50\" \\\n  -H \"Authorization: Bearer {{CLIENT_SECRET}}\"" },
+    { "id": "py-producer", "title": "生产者：Python", "lang": "python",
+      "code": "import requests\n\nBASE = \"{{BASE}}\"\nTOKEN = \"{{PRODUCER_TOKEN}}\"\n\ndef send(title, body, level=\"info\", groups=None, clients=None):\n    payload = {\"title\": title, \"body\": body, \"level\": level}\n    if groups or clients:\n        payload[\"to_groups\"] = groups or []\n        payload[\"to_clients\"] = clients or []\n    else:\n        payload[\"to_all\"] = True\n    r = requests.post(BASE + \"/api/messages\", json=payload,\n                      headers={\"Authorization\": \"Bearer \" + TOKEN}, timeout=10)\n    r.raise_for_status()\n    return r.json()[\"msg\"][\"id\"]\n\nsend(\"磁盘告警\", \"/data 使用率 95%\", level=\"warn\", groups=[\"运维\"])" },
+    { "id": "py-consumer", "title": "消费者：Python 轮询", "lang": "python",
+      "code": "import requests, time\n\nBASE = \"{{BASE}}\"\nSECRET = \"{{CLIENT_SECRET}}\"\nH = {\"Authorization\": \"Bearer \" + SECRET}\n\nlast_id = \"\"  # 持久化保存（如写文件），重启后接着拉\nwhile True:\n    r = requests.get(BASE + \"/api/messages\",\n                     params={\"since\": last_id, \"limit\": 50}, headers=H, timeout=15)\n    r.raise_for_status()\n    for m in r.json()[\"messages\"]:\n        print(m[\"level\"], m[\"title\"], m[\"body\"])\n        last_id = m[\"id\"]  # 游标前移并持久化\n    time.sleep(5)" },
+    { "id": "node-producer", "title": "生产者：Node.js", "lang": "javascript",
+      "code": "const BASE = \"{{BASE}}\";\nconst TOKEN = \"{{PRODUCER_TOKEN}}\";\n\nasync function send(title, body, level = \"info\", to = { to_all: true }) {\n  const r = await fetch(BASE + \"/api/messages\", {\n    method: \"POST\",\n    headers: { \"Content-Type\": \"application/json\", \"Authorization\": \"Bearer \" + TOKEN },\n    body: JSON.stringify({ title, body, level, ...to })\n  });\n  if (!r.ok) throw new Error(\"HTTP \" + r.status);\n  return (await r.json()).msg.id;\n}\n\nsend(\"构建完成\", \"main 分支 CI 通过\", \"success\", { to_groups: [\"研发\"] });" },
+    { "id": "ps-producer", "title": "生产者：PowerShell（Windows 定时任务直接用）", "lang": "powershell",
+      "code": "$Base = \"{{BASE}}\"\n$Token = \"{{PRODUCER_TOKEN}}\"\n$Body = @{\n  title = \"定时巡检\"\n  body = \"5 分钟巡检完成，一切正常\"\n  level = \"success\"\n  to_all = $true\n} | ConvertTo-Json\nInvoke-RestMethod -Uri \"$Base/api/messages\" -Method Post -Body $Body `\n  -ContentType \"application/json\" -Headers @{ Authorization = \"Bearer $Token\" }" }
+  ]
+}

@@ -1,0 +1,30 @@
+name = "notify-center"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+workers_dev = true
+
+# 自定义域名（声明式管理，部署不会再丢；注意：顶层 key 必须放在所有 [vars]/[[...]] 表头前面）
+routes = [
+  { pattern = "notify.ics.de5.net", zone_name = "ics.de5.net", custom_domain = true }
+]
+
+# 管理后台 admin.html 与接口定义 api_spec.json 以文本形式打进 Worker
+[[rules]]
+type = "Text"
+globs = ["**/*.html", "**/*.json"]
+
+# 本地调试: wrangler dev
+# 上线前先执行下面两行拿到 KV id, 回填到此处:
+#   wrangler kv:namespace create NOTIFY_KV
+#   wrangler kv:namespace create NOTIFY_KV --preview
+
+# 认证: 管理口令明文填在这里(你自己填)，部署后可用它登录 /admin 后台。
+# 注意：明文会随代码保存，请只给可信人看；如需更高安全，删掉下面 [vars] 改用 wrangler secret put ADMIN_TOKEN。
+[vars]
+# Public placeholder: fill the real token locally, never commit it.
+ADMIN_TOKEN = "REPLACE_ME_ASK_OWNER"
+
+[[kv_namespaces]]
+binding = "NOTIFY_KV"
+id = "589576285ab149dfa0e1e1ed6e1ce87f"
+preview_id = "437695b1851348f3b470983503f77b60"

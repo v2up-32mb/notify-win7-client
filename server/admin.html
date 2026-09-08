@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NotifyCenter 管理后台</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: "Microsoft YaHei", "PingFang SC", sans-serif; background: #f1f3f6; color: #222; margin: 0; }
+  header { background: #1f2329; color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0; }
+  .badge { font-size: 12px; padding: 2px 10px; border-radius: 20px; background: #3a4149; }
+  .badge.on { background: #22a06b; }
+  .badge.off { background: #8a939e; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 20px 16px 60px; }
+  .card { background: #fff; border-radius: 10px; padding: 18px 20px; margin-bottom: 16px; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+  .card h2 { font-size: 16px; margin: 0 0 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input, select, textarea { border: 1px solid #cfd4da; border-radius: 6px; padding: 8px 10px; font-size: 14px; font-family: inherit; }
+  input[type=text], input[type=password] { min-width: 200px; }
+  textarea { width: 100%; min-height: 70px; resize: vertical; }
+  button { border: 0; border-radius: 6px; padding: 8px 16px; font-size: 14px; cursor: pointer; background: #2b7fff; color: #fff; }
+  button:hover { filter: brightness(.93); }
+  button.danger { background: #e5484d; }
+  button.ghost { background: #eef1f4; color: #333; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; }
+  th { color: #666; font-weight: normal; }
+  .tag { display: inline-block; font-size: 12px; background: #eef4ff; color: #2b7fff; border-radius: 4px; padding: 1px 8px; margin: 1px 2px; }
+  .tag.g { background: #e9f7ef; color: #14804a; }
+  .tag.c { background: #fef3e6; color: #b25e09; }
+  .tag.err { background: #fdecec; color: #c0362c; }
+  #banner { display: none; background: #fdecec; color: #c0362c; border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; }
+  #secretBox { display: none; background: #fffbe6; border: 1px dashed #d9a400; border-radius: 8px; padding: 12px 14px; margin-bottom: 16px; word-break: break-all; }
+  #secretBox code { font-size: 15px; font-weight: bold; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .tabs button { background: #e2e7ec; color: #333; }
+  .tabs button.active { background: #1f2329; color: #fff; }
+  .msg { border-bottom: 1px solid #f0f0f0; padding: 10px 2px; }
+  .msg .t { font-weight: bold; }
+  .msg .b { color: #444; margin: 4px 0; white-space: pre-wrap; word-break: break-word; }
+  .msg .m { font-size: 12px; color: #999; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .stat { background: #f7f9fb; border-radius: 8px; padding: 14px; text-align: center; }
+  .stat .n { font-size: 26px; font-weight: bold; }
+  .stat .l { font-size: 12px; color: #888; }
+  label { font-size: 13px; color: #555; }
+  .formline { margin: 8px 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .formline label { width: 90px; }
+  pre.code { background: #1f2329; color: #d6e2f0; border-radius: 8px; padding: 12px 14px; overflow-x: auto; font-size: 13px; }
+  .exhead { display: flex; align-items: center; gap: 8px; margin: 14px 0 6px; }
+  .exhead b { font-size: 14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔔 NotifyCenter 管理后台</h1>
+  <span class="badge" id="bPost">发送认证: -</span>
+  <span class="badge" id="bGet">拉取认证: -</span>
+  <span style="flex:1"></span>
+  <input type="password" id="token" placeholder="管理口令 ADMIN_TOKEN" style="min-width:260px">
+  <button id="btnLogin">登录</button>
+  <button id="btnLogout" class="ghost">退出</button>
+</header>
+
+<div class="wrap">
+  <div id="banner"></div>
+  <div id="secretBox"></div>
+
+  <div class="tabs">
+    <button data-tab="tOver" class="active">概览</button>
+    <button data-tab="tClient">客户端</button>
+    <button data-tab="tProd">生产者</button>
+    <button data-tab="tSend">发送消息</button>
+    <button data-tab="tMsgs">最近消息</button>
+    <button data-tab="tApi">API 接入</button>
+  </div>
+
+  <div class="card" id="tOver">
+    <h2>运行概况</h2>
+    <div class="grid">
+      <div class="stat"><div class="n" id="sMsg">-</div><div class="l">消息总数</div></div>
+      <div class="stat"><div class="n" id="sCli">-</div><div class="l">客户端数</div></div>
+      <div class="stat"><div class="n" id="sPro">-</div><div class="l">生产者数</div></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button id="btnRefresh" class="ghost">刷新概况</button>
+      <button id="btnClear" class="danger">清空全部消息</button>
+    </div>
+  </div>
+
+  <div class="card" id="tClient" style="display:none">
+    <h2>客户端（配发身份 + 绑定分组）</h2>
+    <div class="formline">
+      <label>客户端 id</label><input type="text" id="cId" placeholder="如 pc-01">
+      <label>分组(逗号分隔)</label><input type="text" id="cGroups" placeholder="如 运维,值班">
+      <button id="btnAddClient">配发</button>
+    </div>
+    <table>
+      <thead><tr><th>客户端</th><th>分组</th><th>密钥</th><th>操作</th></tr></thead>
+      <tbody id="cliRows"><tr><td colspan="4">登录后加载…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="tProd" style="display:none">
+    <h2>生产者（发送令牌）</h2>
+    <div class="formline">
+      <label>生产者名</label><input type="text" id="pName" placeholder="如 监控系统">
+      <button id="btnAddProd">配发令牌</button>
+    </div>
+    <table>
+      <thead><tr><th>生产者</th><th>令牌</th><th>操作</th></tr></thead>
+      <tbody id="proRows"><tr><td>登录后加载…</td><td></td><td></td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="tSend" style="display:none">
+    <h2>发送消息（用管理口令直接发送，效果同生产者）</h2>
+    <div class="formline"><label>标题</label><input type="text" id="mTitle" value="通知" style="flex:1"></div>
+    <div class="formline"><label>正文</label><textarea id="mBody">Hello from NotifyCenter</textarea></div>
+    <div class="formline">
+      <label>级别</label>
+      <select id="mLevel">
+        <option value="info">info 信息</option>
+        <option value="success">success 成功</option>
+        <option value="warn">warn 提醒</option>
+        <option value="error">error 紧急</option>
+      </select>
+      <label>标签</label><input type="text" id="mTag" placeholder="可选">
+    </div>
+    <div class="formline">
+      <label>投递范围</label>
+      <select id="mScope">
+        <option value="all">广播：所有人</option>
+        <option value="group">定向：指定分组</option>
+        <option value="client">点对点：指定客户端</option>
+      </select>
+      <input type="text" id="mTo" placeholder="分组或客户端id，逗号分隔" style="flex:1">
+    </div>
+    <button id="btnSend">发送</button>
+    <span id="sendResult" style="margin-left:10px;color:#14804a"></span>
+  </div>
+
+  <div class="card" id="tMsgs" style="display:none">
+    <h2>最近消息（管理视角：全部可见）</h2>
+    <div class="row"><button id="btnMsgs" class="ghost">刷新</button></div>
+    <div id="msgList" style="margin-top:8px"><div style="color:#999">点击刷新加载…</div></div>
+  </div>
+
+  <div class="card" id="tApi" style="display:none">
+    <h2>API 接入（给 AI 或开发者：填上令牌，复制即用）</h2>
+    <div class="formline">
+      <label>服务地址</label><input type="text" id="apiBase" style="flex:1">
+    </div>
+    <div class="formline">
+      <label>生产者令牌</label><input type="text" id="apiPToken" placeholder="ps_开头，填入后示例自动替换" style="flex:1">
+    </div>
+    <div class="formline">
+      <label>客户端密钥</label><input type="text" id="apiCSec" placeholder="cs_开头，填入后示例自动替换" style="flex:1">
+    </div>
+    <div class="row">
+      <button id="btnApiReload" class="ghost">重新加载接口定义</button>
+      <a href="/api/spec" target="_blank"><button type="button" class="ghost">打开 JSON spec</button></a>
+      <a href="/api/spec.md" target="_blank"><button type="button" class="ghost">打开 Markdown 文档</button></a>
+    </div>
+    <div id="apiList"><div style="color:#999">加载中…</div></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+var $ = function (id) { return document.getElementById(id); };
+
+function getToken() { return (localStorage.getItem("nc_admin") || "").trim(); }
+function setToken(t) {
+  if (t) localStorage.setItem("nc_admin", t); else localStorage.removeItem("nc_admin");
+  $("token").value = getToken();
+}
+function banner(msg) {
+  var b = $("banner");
+  if (!msg) { b.style.display = "none"; b.textContent = ""; return; }
+  b.style.display = "block"; b.textContent = msg;
+}
+function showSecret(html) {
+  var s = $("secretBox");
+  s.style.display = "block"; s.innerHTML = html;
+  s.scrollIntoView();
+}
+function esc(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+  });
+}
+function fmtTs(ts) {
+  try { var d = new Date(ts > 1e12 ? ts : ts * 1000); return d.toLocaleString(); }
+  catch (e) { return ""; }
+}
+
+function api(method, path, body, params) {
+  var url = path;
+  if (params) {
+    var q = Object.keys(params).map(function (k) {
+      return encodeURIComponent(k) + "=" + encodeURIComponent(params[k]);
+    }).join("&");
+    if (q) url += "?" + q;
+  }
+  return fetch(url, {
+    method: method,
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer " + getToken() },
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function (r) {
+    if (r.status === 401) throw new Error("口令不对(401)：请检查管理口令是否正确");
+    return r.json().then(function (d) {
+      if (!d.ok) throw new Error((d.error || "请求失败") + " (HTTP " + r.status + ")");
+      return d;
+    });
+  });
+}
+
+function needLogin() {
+  if (!getToken()) { banner("请先在顶部输入管理口令并点 登录"); return true; }
+  return false;
+}
+
+// ---- tabs ----
+Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (btn) {
+  btn.addEventListener("click", function () {
+    Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function (b) {
+      b.classList.remove("active");
+    });
+    btn.classList.add("active");
+    ["tOver", "tClient", "tProd", "tSend", "tMsgs", "tApi"].forEach(function (id) {
+      $(id).style.display = (id === btn.getAttribute("data-tab")) ? "block" : "none";
+    });
+  });
+});
+
+$("btnLogin").addEventListener("click", function () {
+  var t = $("token").value.trim();
+  if (!t) { banner("请输入管理口令"); return; }
+  setToken(t); banner();
+  refreshAll();
+});
+$("btnLogout").addEventListener("click", function () { setToken(""); banner("已退出，口令已从本浏览器清除"); });
+
+// ---- 概况 ----
+function refreshAll() { loadHealth(); loadOverview(); }
+function loadHealth() {
+  fetch("/health").then(function (r) { return r.json(); }).then(function (d) {
+    var p = $("bPost"), g = $("bGet");
+    var ep = d.auth_enforced && d.auth_enforced.post, eg = d.auth_enforced && d.auth_enforced.get;
+    p.textContent = "发送认证: " + (ep ? "强制" : "开放");
+    g.textContent = "拉取认证: " + (eg ? "强制" : "开放");
+    p.className = "badge " + (ep ? "on" : "off");
+    g.className = "badge " + (eg ? "on" : "off");
+  }).catch(function () {});
+}
+function loadOverview() {
+  if (needLogin()) return;
+  banner();
+  api("GET", "/api/admin/overview").then(function (d) {
+    $("sMsg").textContent = d.messages;
+    $("sCli").textContent = d.clients.length;
+    $("sPro").textContent = d.producers.length;
+    renderClients(d.clients);
+    renderProds(d.producers);
+  }).catch(function (e) { banner(String(e.message || e)); });
+}
+$("btnRefresh").addEventListener("click", refreshAll);
+$("btnClear").addEventListener("click", function () {
+  if (needLogin()) return;
+  if (!confirm("确定清空全部消息吗？客户端不会再收到它们。")) return;
+  if (!confirm("再确认一次：真的清空？")) return;
+  api("DELETE", "/api/messages", null, { confirm: "yes" }).then(function (d) {
+    alert("已清空 " + d.cleared + " 条"); loadOverview();
+  }).catch(function (e) { banner(String(e.message || e)); });
+});
+
+// ---- 客户端 ----
+function maskToken(t) {
+  t = String(t || "");
+  if (!t) return '<span style="color:#999">（老记录，轮换后显示）</span>';
+  if (t.length <= 8) return esc(t);
+  return esc(t.slice(0, 3) + "••••" + t.slice(-4));
+}
+function copyText(txt, btn) {
+  function done() {
+    if (btn) { var o = btn.textContent; btn.textContent = "已复制"; setTimeout(function () { btn.textContent = o; }, 1200); }
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(done, function () { fallbackCopy(txt); done(); });
+  } else { fallbackCopy(txt); done(); }
+}
+function renderClients(clients) {
+  var tb = $("cliRows");
+  if (!clients.length) { tb.innerHTML = '<tr><td colspan="4">暂无客户端，先配发第一个吧</td></tr>'; return; }
+  tb.innerHTML = clients.map(function (c, i) {
+    var id = typeof c === "string" ? c : c.id;
+    var groups = typeof c === "string" ? "" : (c.groups || []).join(",");
+    var sec = typeof c === "string" ? "" : (c.secret || "");
+    return "<tr><td>" + esc(id) + "</td><td>" + esc(groups) + "</td>" +
+      '<td><span id="csec' + i + '">' + maskToken(sec) + "</span> " +
+      (sec ? '<button class="small ghost" data-cshow="' + i + '" data-sec="' + esc(sec) + '">显示</button> ' +
+        '<button class="small ghost" data-ccopy="' + esc(sec) + '">复制密钥</button>' : "") + "</td><td>" +
+      '<button class="small" data-ccfg="' + esc(id) + '" data-sec="' + esc(sec) + '" data-g="' + esc(groups) + '">复制config.json</button> ' +
+      '<button class="small ghost" data-rot="' + esc(id) + '">轮换密钥</button> ' +
+      '<button class="small danger" data-del="' + esc(id) + '">吊销</button></td></tr>';
+  }).join("");
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-cshow]"), function (b) {
+    b.addEventListener("click", function () {
+      var i = b.getAttribute("data-cshow");
+      var el = $("csec" + i);
+      if (b.textContent === "显示") { el.textContent = b.getAttribute("data-sec"); b.textContent = "隐藏"; }
+      else { el.innerHTML = maskToken(b.getAttribute("data-sec")); b.textContent = "显示"; }
+    });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-ccopy]"), function (b) {
+    b.addEventListener("click", function () { copyText(b.getAttribute("data-ccopy"), b); });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-ccfg]"), function (b) {
+    b.addEventListener("click", function () {
+      var cfg = {
+        server_url: location.origin,
+        client_id: b.getAttribute("data-ccfg"),
+        client_secret: b.getAttribute("data-sec"),
+        target: "all", poll_interval: 5, max_visible: 5,
+        bubble_width: 330, bubble_height: 116, start_minimized: true
+      };
+      var txt = JSON.stringify(cfg, null, 2);
+      showSecret("📋 <b>" + esc(b.getAttribute("data-ccfg")) + "</b> 的 config.json（已复制，直接覆盖该电脑 client/config.json 后重启客户端）：<br><pre class=\"code\">" + esc(txt) + "</pre>");
+      copyText(txt, b);
+    });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-rot]"), function (b) {
+    b.addEventListener("click", function () { rotateClient(b.getAttribute("data-rot")); });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-del]"), function (b) {
+    b.addEventListener("click", function () { revokeClient(b.getAttribute("data-del")); });
+  });
+}
+$("btnAddClient").addEventListener("click", function () { provisionClient(false); });
+function provisionClient(isRotate) {
+  if (needLogin()) return;
+  var cid = $("cId").value.trim();
+  if (!cid) { banner("请填写客户端 id"); return; }
+  banner();
+  api("POST", "/api/admin/clients",
+    { client_id: cid, groups: $("cGroups").value },
+    isRotate ? { rotate: "yes" } : null).then(function (d) {
+    showSecret("✅ 客户端 <b>" + esc(d.client_id) + "</b> 分组 <b>" + esc((d.groups || []).join(",")) +
+      "</b><br>密钥（已保存，下表可随时显示/复制）：<br><code>" +
+      esc(d.secret) + "</code>");
+    loadOverview();
+  }).catch(function (e) { banner(String(e.message || e)); });
+}
+function rotateClient(cid) {
+  if (!confirm("轮换 " + cid + " 的密钥？旧密钥立即失效，该电脑需更新配置。")) return;
+  if (needLogin()) return;
+  api("POST", "/api/admin/clients", { client_id: cid, groups: "" }, { rotate: "yes" }).then(function (d) {
+    showSecret("✅ " + esc(cid) + " 新密钥（已保存，下表可随时显示/复制）：<br><code>" + esc(d.secret) +
+      "</code><br>分组已重置，如需分组请重新配发。");
+    loadOverview();
+  }).catch(function (e) { banner(String(e.message || e)); });
+}
+function revokeClient(cid) {
+  if (!confirm("吊销 " + cid + "？其密钥立即失效。")) return;
+  if (needLogin()) return;
+  api("DELETE", "/api/admin/clients", null, { id: cid }).then(function () { loadOverview(); })
+    .catch(function (e) { banner(String(e.message || e)); });
+}
+
+// ---- 生产者 ----
+function renderProds(producers) {
+  var tb = $("proRows");
+  if (!producers.length) { tb.innerHTML = "<tr><td>暂无生产者</td><td></td><td></td></tr>"; return; }
+  tb.innerHTML = producers.map(function (p, i) {
+    var name = typeof p === "string" ? p : p.name;
+    var tok = typeof p === "string" ? "" : (p.token || "");
+    return "<tr><td>" + esc(name) + "</td>" +
+      '<td><span id="ptok' + i + '">' + maskToken(tok) + "</span> " +
+      (tok ? '<button class="small ghost" data-pshow="' + i + '" data-tok="' + esc(tok) + '">显示</button> ' +
+        '<button class="small ghost" data-pcopy="' + esc(tok) + '">复制令牌</button>' : "") + "</td><td>" +
+      '<button class="small ghost" data-pedit="' + esc(name) + '">改名</button> ' +
+      '<button class="small ghost" data-prot="' + esc(name) + '">换令牌</button> ' +
+      '<button class="small danger" data-pdel="' + esc(name) + '">删除</button></td></tr>';
+  }).join("");
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-pshow]"), function (b) {
+    b.addEventListener("click", function () {
+      var i = b.getAttribute("data-pshow");
+      var el = $("ptok" + i);
+      if (b.textContent === "显示") { el.textContent = b.getAttribute("data-tok"); b.textContent = "隐藏"; }
+      else { el.innerHTML = maskToken(b.getAttribute("data-tok")); b.textContent = "显示"; }
+    });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-pcopy]"), function (b) {
+    b.addEventListener("click", function () { copyText(b.getAttribute("data-pcopy"), b); });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-pedit]"), function (b) {
+    b.addEventListener("click", function () {
+      var old = b.getAttribute("data-pedit");
+      var nn = prompt("生产者改名：", old);
+      if (!nn || nn === old) return;
+      if (needLogin()) return;
+      api("PUT", "/api/admin/producers", { name: old, new_name: nn }).then(function (d) {
+        showSecret("✅ 已改名：<b>" + esc(old) + "</b> → <b>" + esc(d.name) + "</b>（令牌不变）");
+        loadOverview();
+      }).catch(function (e) { banner(String(e.message || e)); });
+    });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-prot]"), function (b) {
+    b.addEventListener("click", function () {
+      var name = b.getAttribute("data-prot");
+      if (!confirm("给 " + name + " 换新令牌？旧令牌立即失效。")) return;
+      if (needLogin()) return;
+      api("PUT", "/api/admin/producers", { name: name, rotate: true }).then(function (d) {
+        showSecret("✅ <b>" + esc(d.name) + "</b> 新令牌（已保存，可随时查看）：<br><code>" + esc(d.token) + "</code>");
+        loadOverview();
+      }).catch(function (e) { banner(String(e.message || e)); });
+    });
+  });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-pdel]"), function (b) {
+    b.addEventListener("click", function () {
+      var name = b.getAttribute("data-pdel");
+      if (!confirm("删除生产者 " + name + "？其令牌立即失效。")) return;
+      if (needLogin()) return;
+      api("DELETE", "/api/admin/producers", null, { name: name }).then(function () { loadOverview(); })
+        .catch(function (e) { banner(String(e.message || e)); });
+    });
+  });
+}
+$("btnAddProd").addEventListener("click", function () {
+  if (needLogin()) return;
+  var name = $("pName").value.trim() || "producer";
+  banner();
+  api("POST", "/api/admin/producers", { name: name }).then(function (d) {
+    showSecret("✅ 生产者 <b>" + esc(d.name) + "</b> 令牌（已保存，下表可随时显示/复制）：<br><code>" +
+      esc(d.token) + "</code><br>发送示例：<code>python send.py --token " +
+      esc(d.token) + ' --title "hi" --body "hello"</code>');
+    loadOverview();
+  }).catch(function (e) { banner(String(e.message || e)); });
+});
+
+// ---- 发送 ----
+$("btnSend").addEventListener("click", function () {
+  if (needLogin()) return;
+  var scope = $("mScope").value;
+  var body = { title: $("mTitle").value, body: $("mBody").value, level: $("mLevel").value, tag: $("mTag").value };
+  if (scope === "group") body.to_groups = $("mTo").value;
+  else if (scope === "client") body.to_clients = $("mTo").value;
+  else body.to_all = true;
+  $("sendResult").textContent = "发送中…";
+  api("POST", "/api/messages", body).then(function (d) {
+    $("sendResult").textContent = "✅ 已发送 id=" + d.msg.id;
+    loadOverview();
+  }).catch(function (e) { $("sendResult").textContent = ""; banner(String(e.message || e)); });
+});
+
+// ---- 消息 ----
+$("btnMsgs").addEventListener("click", function () {
+  if (needLogin()) return;
+  banner();
+  api("GET", "/api/messages", null, { limit: "50" }).then(function (d) {
+    var box = $("msgList");
+    if (!d.messages.length) { box.innerHTML = '<div style="color:#999">暂无消息</div>'; return; }
+    box.innerHTML = d.messages.slice().reverse().map(function (m) {
+      var to = m.to || { all: true };
+      var scope = to.all ? '<span class="tag">广播</span>'
+        : (to.groups || []).map(function (g) { return '<span class="tag g">组:' + esc(g) + "</span>"; }).join("") +
+          (to.clients || []).map(function (c) { return '<span class="tag c">→' + esc(c) + "</span>"; }).join("");
+      var lv = m.level === "error" ? "err" : "";
+      return '<div class="msg"><div class="t">[' + esc(m.level || "") + "] " + esc(m.title || "") +
+        ' <span class="tag ' + lv + '">' + esc(m.id || "") + "</span></div>" +
+        '<div class="b">' + esc(m.body || "") + "</div>" +
+        '<div class="m">' + fmtTs(m.ts) + " ｜ 来自 " + esc(m.from || "") + " ｜ " + scope + "</div></div>";
+    }).join("");
+  }).catch(function (e) { banner(String(e.message || e)); });
+});
+
+// ---- API 接入 ----
+var SPEC_CACHE = null;
+function fillExample(code) {
+  return code.split("{{BASE}}").join($("apiBase").value.trim() || location.origin)
+    .split("{{PRODUCER_TOKEN}}").join($("apiPToken").value.trim() || "{{PRODUCER_TOKEN}}")
+    .split("{{CLIENT_SECRET}}").join($("apiCSec").value.trim() || "{{CLIENT_SECRET}}");
+}
+function renderApi() {
+  if (!SPEC_CACHE) return;
+  var box = $("apiList");
+  box.innerHTML = SPEC_CACHE.examples.map(function (x, i) {
+    return '<div class="exhead"><b>' + esc(x.title) + '</b><span class="tag">' + esc(x.lang) +
+      '</span><button class="small ghost" data-copy="' + i + '">复制</button></div>' +
+      '<pre class="code" id="excode' + i + '">' + esc(fillExample(x.code)) + "</pre>";
+  }).join("");
+  Array.prototype.forEach.call(box.querySelectorAll("[data-copy]"), function (b) {
+    b.addEventListener("click", function () {
+      var txt = $("excode" + b.getAttribute("data-copy")).textContent;
+      function done() { b.textContent = "已复制"; setTimeout(function () { b.textContent = "复制"; }, 1200); }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(txt).then(done, function () { fallbackCopy(txt) || done(); });
+      } else { fallbackCopy(txt); done(); }
+    });
+  });
+}
+function fallbackCopy(txt) {
+  try {
+    var ta = document.createElement("textarea");
+    ta.value = txt; document.body.appendChild(ta); ta.select();
+    document.execCommand("copy"); document.body.removeChild(ta);
+    return true;
+  } catch (e) { return false; }
+}
+function loadApi() {
+  fetch("/api/spec").then(function (r) { return r.json(); }).then(function (d) {
+    SPEC_CACHE = d;
+    renderApi();
+  }).catch(function () {
+    $("apiList").innerHTML = '<div style="color:#c0362c">接口定义加载失败</div>';
+  });
+}
+["apiBase", "apiPToken", "apiCSec"].forEach(function (id) {
+  $(id).addEventListener("input", renderApi);
+});
+$("btnApiReload").addEventListener("click", loadApi);
+
+// 启动
+setToken(getToken());
+$("apiBase").value = location.origin;
+loadHealth();
+loadApi();
+if (getToken()) refreshAll();
+</script>
+</body>
+</html>
