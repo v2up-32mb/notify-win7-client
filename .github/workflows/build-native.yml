@@ -26,7 +26,7 @@ jobs:
         run: rc /nologo /fo app.res app.rc
       - name: Compile (MSVC x86 /MT, Win7 API level)
         shell: cmd
-        run: cl /nologo /utf-8 /MT /O1 /Os /DUNICODE /D_UNICODE /DWIN32 /D_WIN32_WINNT=0x0601 /DWINVER=0x0601 /EHsc /GR- /W3 /Fe:NotifyClientNative.exe main.cpp toast.cpp poll.cpp cfg.cpp app.res /link /SUBSYSTEM:WINDOWS /MACHINE:X86 /OPT:REF /OPT:ICF user32.lib gdi32.lib comctl32.lib winhttp.lib shell32.lib psapi.lib
+        run: cl /nologo /utf-8 /MT /O1 /Os /DUNICODE /D_UNICODE /DWIN32 /D_WIN32_WINNT=0x0601 /DWINVER=0x0601 /EHsc /GR- /W3 /Fe:NotifyClientNative.exe main.cpp toast.cpp poll.cpp cfg.cpp app.res /link /SUBSYSTEM:WINDOWS /MACHINE:X86 /OPT:REF /OPT:ICF user32.lib gdi32.lib comctl32.lib winhttp.lib shell32.lib psapi.lib advapi32.lib
       - name: Show output
         shell: pwsh
         run: Get-ChildItem NotifyClientNative.exe | Select-Object Name, Length
