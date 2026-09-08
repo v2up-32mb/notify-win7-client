@@ -24,6 +24,8 @@ class MainForm : Form
     TextBox txtLog;
     StatusStrip statusStrip;
     ToolStripStatusLabel statusLabel;
+    ToolStripStatusLabel memLabel;
+    Timer memTimer;
     Button btnSave, btnNotify;
 
     static Icon appIconCache = null;
@@ -42,6 +44,11 @@ class MainForm : Form
         pollTimer.Interval = Math.Max(2, AppConfig.PollSeconds) * 1000;
         pollTimer.Tick += delegate { PollOnceAsync(false); };
         pollTimer.Start();
+        memTimer = new Timer();
+        memTimer.Interval = 10000;
+        memTimer.Tick += delegate { UpdateMem(); };
+        memTimer.Start();
+        UpdateMem();
     }
 
     protected override void SetVisibleCore(bool value)
@@ -228,7 +235,11 @@ class MainForm : Form
         statusLabel.Text = "\u5c31\u7eea";
         statusLabel.Spring = true;
         statusLabel.TextAlign = ContentAlignment.MiddleLeft;
+        memLabel = new ToolStripStatusLabel();
+        memLabel.TextAlign = ContentAlignment.MiddleRight;
+        memLabel.AutoSize = true;
         statusStrip.Items.Add(statusLabel);
+        statusStrip.Items.Add(memLabel);
         statusStrip.Dock = DockStyle.Bottom;
         Controls.Add(statusStrip);
         FormClosing += delegate(object s, FormClosingEventArgs e) {
@@ -344,8 +355,10 @@ class MainForm : Form
                 firstFetch = false;
                 string s = "\u8fde\u63a5\u6b63\u5e38 " + DateTime.Now.ToString("HH:mm:ss") + " (\u9996\u8f6e\u4ec5\u540c\u6b65\u6e38\u6807\uff0c\u4e0d\u6253\u6270)";
                 SetStatus(s);
-                AppendLog(s + " cursor=" + cursor);
-                AppendLog(MemInfo());
+                if (!string.IsNullOrEmpty(cursor))
+                    AppendLog(s + " cursor=" + cursor);
+                else
+                    AppendLog(s + " cursor=(\u7a7a\uff0c\u6682\u65e0\u6d88\u606f)");
                 return;
             }
             if (msgs == null || msgs.Count == 0)
@@ -385,9 +398,13 @@ class MainForm : Form
     {
         string lv = string.IsNullOrEmpty(m.level) ? "info" : m.level;
         string t = SingleLine(string.IsNullOrEmpty(m.title) ? "(\u65e0\u6807\u9898)" : m.title);
-        string bd = (m.body ?? "").Replace("\r\n", "\n").Replace("\r", "\n");
-        if (bd.Length > 2000) bd = bd.Substring(0, 2000) + "...";
-        if (bd.Length > 0) return "[" + lv + "] " + t + "\r\n" + bd.Replace("\n", "\r\n");
+        // One log line per message (full multi-line body stays in the toast).
+        System.Text.StringBuilder hb = new System.Text.StringBuilder();
+        foreach (char c in (m.body ?? ""))
+            hb.Append((c == '\r' || c == '\n' || c == '\t') ? ' ' : c);
+        string head = hb.ToString();
+        if (head.Length > 200) head = head.Substring(0, 200) + "...";
+        if (head.Length > 0) return "[" + lv + "] " + t + " — " + head;
         return "[" + lv + "] " + t;
     }
 
@@ -445,6 +462,18 @@ class MainForm : Form
                 txtLog.ScrollToCaret();
             }
             catch { }
+        }
+        catch { }
+    }
+
+    void UpdateMem()
+    {
+        try
+        {
+            string m = MemInfo();
+            if (memLabel == null) return;
+            if (statusStrip.InvokeRequired) statusStrip.BeginInvoke((MethodInvoker)delegate { memLabel.Text = m; });
+            else memLabel.Text = m;
         }
         catch { }
     }
@@ -511,6 +540,7 @@ class MainForm : Form
             if (tray != null) tray.Dispose();
             if (menu != null) menu.Dispose();
             if (pollTimer != null) pollTimer.Dispose();
+            if (memTimer != null) memTimer.Dispose();
         }
         base.Dispose(disposing);
     }
