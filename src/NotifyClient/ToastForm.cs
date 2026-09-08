@@ -18,7 +18,19 @@ class ToastForm : Form
     double opacityTarget = 1.0;
     bool closing = false;
 
-    public int TargetTop { get { return targetTop; } set { targetTop = value; } }
+    public int TargetTop
+    {
+        get { return targetTop; }
+        set
+        {
+            targetTop = value;
+            // Relayout retargets settled toasts whose animTimer already stopped
+            // (new toast below, or a lower one closed): without restarting it
+            // they stay put and pile up on the same slot.
+            try { if (!closing && animTimer != null && Visible) animTimer.Start(); }
+            catch { }
+        }
+    }
 
     // Cached fonts rebuilt from AppConfig (see ReloadSettings): one toast used to
     // allocate 2 Fonts, with many messages GDI/font handles piled up.
