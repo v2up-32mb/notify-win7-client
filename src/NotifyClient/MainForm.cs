@@ -15,9 +15,11 @@ class MainForm : Form
     string cursor;
     volatile bool polling = false;
     bool startupDone = false;
+    bool startupSuppressed = false;
+    bool loadInitDone = false;
 
     TextBox txtUrl, txtSecret;
-    NumericUpDown numPoll, numMax, numStay;
+    NumericUpDown numPoll, numMax, numStay, numToastW, numToastH, numTitleFS, numBodyFS, numMargin, numGap;
     CheckBox chkAuto, chkMin, chkSound, chkAutoClose;
     TextBox txtLog;
     StatusStrip statusStrip;
@@ -32,6 +34,7 @@ class MainForm : Form
         ToastManager.MaxCount = AppConfig.MaxToasts;
         ToastManager.StaySeconds = AppConfig.StaySeconds;
         ToastManager.AutoClose = AppConfig.ToastAutoClose;
+        ToastForm.ReloadSettings();
         InitTray();
         InitWindow();
         ApplyAutoStart(AppConfig.AutoStart);
@@ -43,7 +46,22 @@ class MainForm : Form
 
     protected override void SetVisibleCore(bool value)
     {
-        if (!startupDone && AppConfig.StartMinimized) value = false;
+        // Suppress ONLY the very first show attempt when starting minimized,
+        // and disarm immediately: with no handle ever created, OnLoad may never
+        // fire until the user opens the window, so disarming must happen here --
+        // otherwise every later Show() gets swallowed too and the window can
+        // never be opened again.
+        if (!startupDone && value)
+        {
+            startupDone = true;
+            if (AppConfig.StartMinimized)
+            {
+                startupSuppressed = true;
+                base.SetVisibleCore(false);
+                try { ShowInTaskbar = false; } catch { }
+                return;
+            }
+        }
         base.SetVisibleCore(value);
     }
 
@@ -61,13 +79,20 @@ class MainForm : Form
         {
             BeginInvoke((MethodInvoker)delegate
             {
-                if (startupDone) return;
-                startupDone = true;
-                try
+                // Own one-shot guard: OnLoad can refire if the handle is recreated
+                // (ShowInTaskbar toggles do that), so this is separate from SetVisibleCore.
+                if (loadInitDone) return;
+                loadInitDone = true;
+                if (startupSuppressed)
                 {
-                    if (AppConfig.StartMinimized) HideWindow();
-                    else ShowWindow();
+                    // First real open after a minimized start: NEVER re-hide here.
+                    // Timer polling already kept toasts working while headless.
+                    startupSuppressed = false;
+                    try { PollOnceAsync(false); }
+                    catch { }
+                    return;
                 }
+                try { ShowWindow(); }
                 catch { }
                 try { PollOnceAsync(false); }
                 catch { }
@@ -134,7 +159,7 @@ class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(520, 540);
+        ClientSize = new Size(520, 610);
         ShowInTaskbar = true;
         try { Icon = LoadAppIcon(); } catch { }
         int y = 12, lh = 24;
@@ -149,6 +174,22 @@ class MainForm : Form
         y += 28;
         Label l5 = new Label(); l5.Text = "\u505c\u7559\u79d2\u6570:"; l5.SetBounds(12, y, 110, lh); Controls.Add(l5);
         numStay = new NumericUpDown(); numStay.Minimum = 3; numStay.Maximum = 120; numStay.Value = Clamp(AppConfig.StaySeconds, 3, 120); numStay.SetBounds(122, y, 60, lh); Controls.Add(numStay);
+        y += 30;
+
+        Label l6 = new Label(); l6.Text = "气泡宽(200-600):"; l6.SetBounds(12, y, 150, lh); Controls.Add(l6);
+        numToastW = new NumericUpDown(); numToastW.Minimum = 200; numToastW.Maximum = 600; numToastW.Value = Clamp(AppConfig.ToastWidth, 200, 600); numToastW.SetBounds(165, y, 55, lh); Controls.Add(numToastW);
+        Label l7 = new Label(); l7.Text = "气泡高(80-300):"; l7.SetBounds(225, y, 150, lh); Controls.Add(l7);
+        numToastH = new NumericUpDown(); numToastH.Minimum = 80; numToastH.Maximum = 300; numToastH.Value = Clamp(AppConfig.ToastHeight, 80, 300); numToastH.SetBounds(378, y, 55, lh); Controls.Add(numToastH);
+        y += 28;
+        Label l8 = new Label(); l8.Text = "标题字号(8-20):"; l8.SetBounds(12, y, 150, lh); Controls.Add(l8);
+        numTitleFS = new NumericUpDown(); numTitleFS.Minimum = 8; numTitleFS.Maximum = 20; numTitleFS.Value = Clamp(AppConfig.ToastTitleFontSize, 8, 20); numTitleFS.SetBounds(165, y, 55, lh); Controls.Add(numTitleFS);
+        Label l9 = new Label(); l9.Text = "正文字号(8-20):"; l9.SetBounds(225, y, 150, lh); Controls.Add(l9);
+        numBodyFS = new NumericUpDown(); numBodyFS.Minimum = 8; numBodyFS.Maximum = 20; numBodyFS.Value = Clamp(AppConfig.ToastBodyFontSize, 8, 20); numBodyFS.SetBounds(378, y, 55, lh); Controls.Add(numBodyFS);
+        y += 28;
+        Label l10 = new Label(); l10.Text = "边距(0-64):"; l10.SetBounds(12, y, 150, lh); Controls.Add(l10);
+        numMargin = new NumericUpDown(); numMargin.Minimum = 0; numMargin.Maximum = 64; numMargin.Value = Clamp(AppConfig.ToastMargin, 0, 64); numMargin.SetBounds(165, y, 55, lh); Controls.Add(numMargin);
+        Label l11 = new Label(); l11.Text = "间隔(0-64):"; l11.SetBounds(225, y, 150, lh); Controls.Add(l11);
+        numGap = new NumericUpDown(); numGap.Minimum = 0; numGap.Maximum = 64; numGap.Value = Clamp(AppConfig.ToastGap, 0, 64); numGap.SetBounds(378, y, 55, lh); Controls.Add(numGap);
         y += 30;
         chkAuto = new CheckBox(); chkAuto.Text = "\u5f00\u673a\u542f\u52a8"; chkAuto.Checked = AppConfig.AutoStart; chkAuto.SetBounds(12, y, 150, 22); Controls.Add(chkAuto);
         chkMin = new CheckBox(); chkMin.Text = "\u542f\u52a8\u540e\u81ea\u52a8\u6700\u5c0f\u5316\u5230\u6258\u76d8"; chkMin.Checked = AppConfig.StartMinimized; chkMin.SetBounds(170, y, 220, 22); Controls.Add(chkMin);
@@ -175,8 +216,8 @@ class MainForm : Form
         txtLog.ReadOnly = true;
         txtLog.ScrollBars = ScrollBars.Vertical;
         txtLog.WordWrap = true;
-        txtLog.SetBounds(12, y, 496, 168);
-        Controls.Add(txtLog); y += 174;
+        txtLog.SetBounds(12, y, 496, 150);
+        Controls.Add(txtLog); y += 156;
         Label lblPath = new Label();
         lblPath.Text = "\u914d\u7f6e\uff1a" + AppConfig.ConfigPath;
         lblPath.ForeColor = Color.Gray;
@@ -210,13 +251,20 @@ class MainForm : Form
         AppConfig.StartMinimized = chkMin.Checked;
         AppConfig.SoundEnabled = chkSound.Checked;
         AppConfig.ToastAutoClose = chkAutoClose.Checked;
+        AppConfig.ToastWidth = (int)numToastW.Value;
+        AppConfig.ToastHeight = (int)numToastH.Value;
+        AppConfig.ToastTitleFontSize = (int)numTitleFS.Value;
+        AppConfig.ToastBodyFontSize = (int)numBodyFS.Value;
+        AppConfig.ToastMargin = (int)numMargin.Value;
+        AppConfig.ToastGap = (int)numGap.Value;
         AppConfig.Save();
         ApplyAutoStart(AppConfig.AutoStart);
         pollTimer.Interval = AppConfig.PollSeconds * 1000;
         ToastManager.MaxCount = AppConfig.MaxToasts;
         ToastManager.StaySeconds = AppConfig.StaySeconds;
         ToastManager.AutoClose = AppConfig.ToastAutoClose;
-        string s = "\u5df2\u4fdd\u5b58 " + DateTime.Now.ToString("HH:mm:ss") + " StartMinimized=" + (AppConfig.StartMinimized ? "1" : "0");
+        ToastForm.ReloadSettings();
+        string s = "\u5df2\u4fdd\u5b58 " + DateTime.Now.ToString("HH:mm:ss") + " StartMinimized=" + (AppConfig.StartMinimized ? "1" : "0") + " toast=" + AppConfig.ToastWidth + "x" + AppConfig.ToastHeight;
         SetStatus(s);
         AppendLog(s);
     }
@@ -248,14 +296,18 @@ class MainForm : Form
         string cur = cursor;
         string baseUrl = AppConfig.BaseUrl;
         string secret = AppConfig.Secret;
+        System.Threading.SynchronizationContext ctx = System.Threading.SynchronizationContext.Current;
         System.Threading.ThreadPool.QueueUserWorkItem(delegate(object _) {
             string latest = null, err = null;
             List<Msg> msgs = new List<Msg>();
             try { msgs = Poller.Fetch(baseUrl, secret, cur, out latest, out err); }
             catch (Exception ex) { err = ex.Message; }
+            // Marshal back even with no window handle yet (minimized start):
+            // Control.BeginInvoke needs a handle, SynchronizationContext.Post doesn't.
             try
             {
                 if (IsHandleCreated) BeginInvoke((MethodInvoker)delegate { OnPollCompleted(msgs, latest, err, manual); });
+                else if (ctx != null) ctx.Post(delegate(object __) { OnPollCompleted(msgs, latest, err, manual); }, null);
                 else polling = false;
             }
             catch { try { polling = false; } catch { } }
@@ -362,8 +414,13 @@ class MainForm : Form
             if (txtLog.InvokeRequired) { try { txtLog.BeginInvoke((MethodInvoker)delegate { AppendLog(line); }); } catch { } return; }
             string text = (line ?? "").Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", "\r\n");
             txtLog.AppendText("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + text + "\r\n");
+            // Without a window handle (minimized start, window never opened),
+            // caret/scroll APIs are no-ops at best: only touch them with a handle.
+            bool hasHandle = false;
+            try { hasHandle = txtLog.IsHandleCreated; } catch { }
             try
             {
+                if (!hasHandle) return;
                 if (txtLog.Lines.Length > 800)
                 {
                     string[] lines = txtLog.Lines;

@@ -19,42 +19,56 @@ class ToastForm : Form
     bool closing = false;
 
     public int TargetTop { get { return targetTop; } set { targetTop = value; } }
-    public const int W = 320, H = 110;
 
-    // Cached: one toast used to allocate 2 Fonts; with many messages GDI/font handles piled up.
-    static readonly Font TitleFont = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold);
-    static readonly Font BodyFont = new Font(FontFamily.GenericSansSerif, 9, FontStyle.Regular);
+    // Cached fonts rebuilt from AppConfig (see ReloadSettings): one toast used to
+    // allocate 2 Fonts, with many messages GDI/font handles piled up.
+    static Font titleFont;
+    static Font bodyFont;
+    int tw, th;
+
+    // Old cached instances are intentionally not disposed: visible toasts may
+    // still paint with them; a save leaks at most 2 font handles, negligible.
+    public static void ReloadSettings()
+    {
+        try { titleFont = new Font(FontFamily.GenericSansSerif, Math.Max(8, Math.Min(20, AppConfig.ToastTitleFontSize)), FontStyle.Bold); }
+        catch { }
+        try { bodyFont = new Font(FontFamily.GenericSansSerif, Math.Max(8, Math.Min(20, AppConfig.ToastBodyFontSize)), FontStyle.Regular); }
+        catch { }
+    }
 
     public ToastForm(string t, string b, string lv)
     {
         title = SingleLine(t ?? "", 80);
         body = ClipBody(b ?? "");
         level = lv ?? "info";
+        tw = Math.Max(200, Math.Min(600, AppConfig.ToastWidth));
+        th = Math.Max(80, Math.Min(300, AppConfig.ToastHeight));
+        if (titleFont == null || bodyFont == null) ReloadSettings();
         stayMs = Math.Max(3, ToastManager.StaySeconds) * 1000;
 
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        Size = new Size(W, H);
+        Size = new Size(tw, th);
         BackColor = Color.White;
 
         bar = new Panel();
         bar.BackColor = LevelColor(level);
-        bar.SetBounds(0, 0, 6, H);
+        bar.SetBounds(0, 0, 6, th);
         Controls.Add(bar);
 
         lblTitle = new Label();
         lblTitle.Text = title;
-        lblTitle.Font = TitleFont;
+        lblTitle.Font = titleFont ?? this.Font;
         lblTitle.ForeColor = Color.FromArgb(0x21, 0x21, 0x21);
         lblTitle.AutoSize = false;
-        lblTitle.SetBounds(14, 8, 268, 20);
+        lblTitle.SetBounds(14, 8, tw - 52, 20);
         Controls.Add(lblTitle);
 
         txtBody = new TextBox();
         txtBody.Text = body.Replace("\n", "\r\n");
-        txtBody.Font = BodyFont;
+        txtBody.Font = bodyFont ?? this.Font;
         txtBody.ForeColor = Color.FromArgb(0x42, 0x42, 0x42);
         txtBody.BackColor = Color.White;
         txtBody.BorderStyle = BorderStyle.None;
@@ -64,7 +78,7 @@ class ToastForm : Form
         txtBody.ScrollBars = ScrollBars.None;
         txtBody.TabStop = false;
         txtBody.Cursor = Cursors.Default;
-        txtBody.SetBounds(14, 30, 292, 66);
+        txtBody.SetBounds(14, 30, tw - 28, th - 44);
         txtBody.Click += delegate { BeginClose(); };
         Controls.Add(txtBody);
 
@@ -73,7 +87,7 @@ class ToastForm : Form
         btnX.FlatStyle = FlatStyle.Flat;
         btnX.FlatAppearance.BorderSize = 0;
         btnX.ForeColor = Color.Gray;
-        btnX.SetBounds(W - 30, 4, 26, 22);
+        btnX.SetBounds(tw - 30, 4, 26, 22);
         btnX.Click += delegate { BeginClose(); };
         Controls.Add(btnX);
 
@@ -167,7 +181,7 @@ class ToastForm : Form
         try
         {
             // slide X toward target left + fade
-            int wantLeft = targetTop < 0 ? Left : (Screen.GetWorkingArea(Location).Right - W - 8);
+            int wantLeft = targetTop < 0 ? Left : (Screen.GetWorkingArea(Location).Right - this.Width - 8);
             int dx = wantLeft - Left;
             if (Math.Abs(dx) > 24) Left += dx / 3;
             else if (dx != 0) Left = wantLeft;

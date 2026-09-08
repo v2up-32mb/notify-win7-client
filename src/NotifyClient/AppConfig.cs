@@ -14,6 +14,12 @@ static class AppConfig
     public static bool StartMinimized = true;
     public static bool SoundEnabled = true;
     public static bool ToastAutoClose = true;
+    public static int ToastWidth = 320;
+    public static int ToastHeight = 110;
+    public static int ToastTitleFontSize = 10;
+    public static int ToastBodyFontSize = 9;
+    public static int ToastMargin = 12;
+    public static int ToastGap = 8;
 
     static string dir;
     static string cfgPath;
@@ -87,6 +93,12 @@ static class AppConfig
                     else if (k == "startminimized") StartMinimized = !(v == "0" || v.ToLower() == "false");
                     else if (k == "soundenabled" || k == "sound") SoundEnabled = !(v == "0" || v.ToLower() == "false");
                     else if (k == "toastautoclose" || k == "autoclose") ToastAutoClose = !(v == "0" || v.ToLower() == "false");
+                    else if (k == "toastwidth") ToastWidth = Math.Max(200, Math.Min(600, int.Parse(v)));
+                    else if (k == "toastheight") ToastHeight = Math.Max(80, Math.Min(300, int.Parse(v)));
+                    else if (k == "toasttitlefontsize" || k == "toasttitlefont") ToastTitleFontSize = Math.Max(8, Math.Min(20, int.Parse(v)));
+                    else if (k == "toastbodyfontsize" || k == "toastbodyfont") ToastBodyFontSize = Math.Max(8, Math.Min(20, int.Parse(v)));
+                    else if (k == "toastmargin") ToastMargin = Math.Max(0, Math.Min(64, int.Parse(v)));
+                    else if (k == "toastgap") ToastGap = Math.Max(0, Math.Min(64, int.Parse(v)));
                 }
                 catch { }
             }
@@ -111,6 +123,12 @@ static class AppConfig
                 "StartMinimized=" + (StartMinimized ? "1" : "0"),
                 "SoundEnabled=" + (SoundEnabled ? "1" : "0"),
                 "ToastAutoClose=" + (ToastAutoClose ? "1" : "0"),
+                "ToastWidth=" + ToastWidth,
+                "ToastHeight=" + ToastHeight,
+                "ToastTitleFontSize=" + ToastTitleFontSize,
+                "ToastBodyFontSize=" + ToastBodyFontSize,
+                "ToastMargin=" + ToastMargin,
+                "ToastGap=" + ToastGap,
             });
         }
         catch { }

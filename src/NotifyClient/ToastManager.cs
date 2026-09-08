@@ -12,7 +12,13 @@ static class ToastManager
     public static int MaxCount = 5;
     public static int StaySeconds = 10;
     public static bool AutoClose = true;
-    const int W = 330, H = 96, MARGIN = 12, GAP = 8;
+
+    // Layout follows AppConfig live (old hard-coded 330x96 did not even match
+    // ToastForm's 320x110, so stacked positions used to drift by a few px).
+    static int TW() { try { return Math.Max(200, Math.Min(600, AppConfig.ToastWidth)); } catch { return 320; } }
+    static int TH() { try { return Math.Max(80, Math.Min(300, AppConfig.ToastHeight)); } catch { return 110; } }
+    static int TM() { try { return Math.Max(0, Math.Min(64, AppConfig.ToastMargin)); } catch { return 12; } }
+    static int TG() { try { return Math.Max(0, Math.Min(64, AppConfig.ToastGap)); } catch { return 8; } }
 
     public static void Show(string title, string body, string level)
     {
@@ -52,6 +58,7 @@ static class ToastManager
         try
         {
             Rectangle wa = Screen.PrimaryScreen.WorkingArea;
+            int W = TW(), H = TH(), MARGIN = TM(), GAP = TG();
             int right = wa.Right - MARGIN - W;
             int bottom = wa.Bottom - MARGIN - H;
             for (int i = 0; i < list.Count; i++)

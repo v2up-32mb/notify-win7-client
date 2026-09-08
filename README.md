@@ -5,6 +5,9 @@ Lightweight Win7 x86 tray client for notify-center.
 - .NET 4.0, single exe, no deps (Actions artifact NotifyClient-win7-x86)
 - Polls GET /api/messages?limit=50&since=cursor with Bearer secret
 - Win10-like stacked toasts, close-lower => uppers slide down
+- Toast look is configurable in the settings window: width/height,
+  title/body font size, edge margin, stacking gap (saved to config.ini,
+  applied to new toasts on save; layout sizes are read live)
 - Config lives in %USERPROFILE%\.notifyclient\config.ini (auto-created)
 - Only persisted state is cursor.txt (since param); first fetch only syncs cursor
 - Message log is memory-only (no history file); restart starts with an empty log
@@ -21,8 +24,10 @@ Build: GitHub Actions only (windows-latest msbuild/dotnet). See .github/workflow
   Polling runs on a background thread, so showing the window is instant
   even while a 15s HTTP fetch is in flight.
 - Startup minimize: StartMinimized=0 is respected. The first show is
-  suppressed via SetVisibleCore (no flash), then OnLoad applies
-  Hide/Show + first async poll. Requires Application.Run(f).
+  suppressed via SetVisibleCore (no flash) and disarmed immediately, so
+  the window can always be reopened later; polling/completion marshal
+  through SynchronizationContext, so toasts work even before the window
+  ever gets a handle. Requires Application.Run(f).
 - Main window has an embedded read-only multi-line log plus a bottom
   status strip. There is no separate history dialog and no history file.
 - Status line shows short state (ready / saved / fetch fail / got N);
