@@ -4,6 +4,10 @@ using System.IO;
 using System.Text;
 
 // Lightweight history: append-only TSV in home dir, cap 500 rows.
+// Newlines/tabs are escaped so multi-line message bodies survive a reload:
+//   Clean:   \ -> \\, TAB -> \t, CRLF/LF -> \n
+//   Unclean: reverse scan (\\ -> \, \n -> newline, \t -> tab).
+// Old files (newlines stored as spaces) still load fine.
 static class HistoryStore
 {
     const int MAX_ROWS = 500;
@@ -41,7 +45,7 @@ static class HistoryStore
                 string[] p = lines[i].Split('\t');
                 if (p.Length < 5) continue;
                 Item it = new Item();
-                it.time = p[0]; it.id = p[1]; it.level = p[2]; it.title = p[3]; it.body = p[4];
+                it.time = p[0]; it.id = Unclean(p[1]); it.level = Unclean(p[2]); it.title = Unclean(p[3]); it.body = Unclean(p[4]);
                 r.Add(it);
             }
         }
@@ -71,6 +75,27 @@ static class HistoryStore
     static string Clean(string s)
     {
         if (s == null) return "";
-        return s.Replace("\\", "\\\\").Replace("\t", " ").Replace("\r", " ").Replace("\n", " ");
+        return s.Replace("\\", "\\\\").Replace("\t", "\\t").Replace("\r\n", "\\n").Replace("\r", "\\n").Replace("\n", "\\n");
+    }
+
+    static string Unclean(string s)
+    {
+        if (s == null) return "";
+        StringBuilder sb = new StringBuilder(s.Length);
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (c == '\\' && i + 1 < s.Length)
+            {
+                char e = s[i + 1];
+                if (e == '\\') { sb.Append('\\'); i++; }
+                else if (e == 'n') { sb.Append('\n'); i++; }
+                else if (e == 't') { sb.Append('\t'); i++; }
+                else if (e == 'r') { sb.Append('\r'); i++; }
+                else { sb.Append(e); i++; }
+            }
+            else sb.Append(c);
+        }
+        return sb.ToString();
     }
 }

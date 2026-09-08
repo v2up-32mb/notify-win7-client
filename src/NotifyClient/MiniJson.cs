@@ -94,6 +94,11 @@ static class MiniJson
                 if (e == 'n') sb.Append('\n');
                 else if (e == 'r') sb.Append('\r');
                 else if (e == 't') sb.Append('\t');
+                else if (e == 'b') sb.Append('\b');
+                else if (e == 'f') sb.Append('\f');
+                else if (e == '/') sb.Append('/');
+                else if (e == '"') sb.Append('"');
+                else if (e == '\\') sb.Append('\\');
                 else if (e == 'u' && i + 4 < obj.Length)
                 {
                     try { sb.Append((char)Convert.ToInt32(obj.Substring(i + 1, 4), 16)); i += 4; }

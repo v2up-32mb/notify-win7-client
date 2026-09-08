@@ -21,7 +21,9 @@ static class Program
         {
             using (MainForm f = new MainForm())
             {
-                Application.Run();
+                // MUST pass main form: parameterless Run() never shows/activates it,
+                // so Shown/Load startup logic (minimize + first poll) would never run.
+                Application.Run(f);
             }
         }
         catch (Exception ex)

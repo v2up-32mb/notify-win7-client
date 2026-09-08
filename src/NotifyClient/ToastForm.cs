@@ -4,10 +4,12 @@ using System.Windows.Forms;
 
 // Win10-like toast, borderless, topmost, no focus steal, fade+slide anim.
 // v2: honors ToastManager.StaySeconds + ToastManager.AutoClose.
+// Body supports multi-line (\n) with word-wrap via read-only TextBox.
 class ToastForm : Form
 {
     string title, body, level;
-    Label lblTitle, lblBody;
+    Label lblTitle;
+    TextBox txtBody;
     Button btnX;
     Panel bar;
     Timer lifeTimer, animTimer;
@@ -21,7 +23,9 @@ class ToastForm : Form
 
     public ToastForm(string t, string b, string lv)
     {
-        title = t ?? ""; body = b ?? ""; level = lv ?? "info";
+        title = SingleLine(t ?? "", 80);
+        body = ClipBody(b ?? "");
+        level = lv ?? "info";
         stayMs = Math.Max(3, ToastManager.StaySeconds) * 1000;
 
         FormBorderStyle = FormBorderStyle.None;
@@ -40,15 +44,25 @@ class ToastForm : Form
         lblTitle.Text = title;
         lblTitle.Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold);
         lblTitle.ForeColor = Color.FromArgb(0x21, 0x21, 0x21);
+        lblTitle.AutoSize = false;
         lblTitle.SetBounds(14, 8, 268, 20);
         Controls.Add(lblTitle);
 
-        lblBody = new Label();
-        lblBody.Text = body;
-        lblBody.Font = new Font(FontFamily.GenericSansSerif, 9, FontStyle.Regular);
-        lblBody.ForeColor = Color.FromArgb(0x42, 0x42, 0x42);
-        lblBody.SetBounds(14, 30, 292, 66);
-        Controls.Add(lblBody);
+        txtBody = new TextBox();
+        txtBody.Text = body.Replace("\n", "\r\n");
+        txtBody.Font = new Font(FontFamily.GenericSansSerif, 9, FontStyle.Regular);
+        txtBody.ForeColor = Color.FromArgb(0x42, 0x42, 0x42);
+        txtBody.BackColor = Color.White;
+        txtBody.BorderStyle = BorderStyle.None;
+        txtBody.Multiline = true;
+        txtBody.ReadOnly = true;
+        txtBody.WordWrap = true;
+        txtBody.ScrollBars = ScrollBars.None;
+        txtBody.TabStop = false;
+        txtBody.Cursor = Cursors.Default;
+        txtBody.SetBounds(14, 30, 292, 66);
+        txtBody.Click += delegate { BeginClose(); };
+        Controls.Add(txtBody);
 
         btnX = new Button();
         btnX.Text = "x";
@@ -80,6 +94,26 @@ class ToastForm : Form
             catch { }
         };
         Click += delegate { BeginClose(); };
+    }
+
+    static string SingleLine(string s, int max)
+    {
+        if (s == null) return "";
+        s = s.Replace("\r\n", " ").Replace("\r", " ").Replace("\n", " ");
+        s = s.Trim();
+        if (s.Length > max) s = s.Substring(0, max) + "...";
+        return s;
+    }
+
+    static string ClipBody(string s)
+    {
+        if (s == null) return "";
+        s = s.Replace("\r\n", "\n").Replace("\r", "\n");
+        // Toast shows a preview; full text lives in the main-window log.
+        if (s.Length > 600) s = s.Substring(0, 600) + "...";
+        // Trim trailing blank lines.
+        s = s.TrimEnd('\n', ' ', '\t');
+        return s;
     }
 
     protected override bool ShowWithoutActivation { get { return true; } }
