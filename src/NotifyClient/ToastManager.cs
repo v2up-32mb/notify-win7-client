@@ -11,6 +11,7 @@ static class ToastManager
     static object locker = new object();
     public static int MaxCount = 5;
     public static int StaySeconds = 10;
+    public static bool AutoClose = true;
     const int W = 330, H = 96, MARGIN = 12, GAP = 8;
 
     public static void Show(string title, string body, string level)
@@ -30,7 +31,7 @@ static class ToastManager
                 list.RemoveAt(list.Count - 1);
                 try { old.Close(); old.Dispose(); } catch { }
             }
-            ToastForm f = new ToastForm(title, body, level, StaySeconds);
+            ToastForm f = new ToastForm(title, body, level);
             list.Insert(0, f); // newest at index 0 (bottom)
             Relayout();
         }

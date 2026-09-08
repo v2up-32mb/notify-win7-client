@@ -16,13 +16,16 @@ class MainForm : Form
 
     TextBox txtUrl, txtSecret;
     NumericUpDown numPoll, numMax, numStay;
-    CheckBox chkAuto, chkMin;
+    CheckBox chkAuto, chkMin, chkSound, chkAutoClose;
     Label lblStatus;
     Button btnSave, btnTest;
 
     public MainForm()
     {
         cursor = AppConfig.LoadCursor();
+        ToastManager.MaxCount = AppConfig.MaxToasts;
+        ToastManager.StaySeconds = AppConfig.StaySeconds;
+        ToastManager.AutoClose = AppConfig.ToastAutoClose;
         InitTray();
         InitWindow();
         ApplyAutoStart(AppConfig.AutoStart);
@@ -45,14 +48,21 @@ class MainForm : Form
     void InitTray()
     {
         menu = new ContextMenuStrip();
-        menu.Items.Add("设置", null, delegate { ShowWindow(); });
+        menu.Items.Add("打开设置", null, delegate { ShowWindow(); });
+        menu.Items.Add("历史消息", null, delegate { ShowHistory(); });
         menu.Items.Add("测试通知", null, delegate {
             ToastManager.Show("测试通知", "托盘客户端工作正常。", "info");
         });
         menu.Items.Add("退出", null, delegate { Quit(); });
         tray = new NotifyIcon();
         tray.Text = "NotifyClient";
-        tray.Icon = SystemIcons.Application;
+        try
+        {
+            string ico = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+            if (System.IO.File.Exists(ico)) tray.Icon = new Icon(ico);
+            else tray.Icon = SystemIcons.Application;
+        }
+        catch { tray.Icon = SystemIcons.Application; }
         tray.ContextMenuStrip = menu;
         tray.Visible = true;
         tray.DoubleClick += delegate { ShowWindow(); };
@@ -64,7 +74,7 @@ class MainForm : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(380, 330);
+        ClientSize = new Size(380, 400);
         ShowInTaskbar = true;
 
         int y = 12, lh = 24;
@@ -85,6 +95,9 @@ class MainForm : Form
         chkAuto = new CheckBox(); chkAuto.Text = "开机启动"; chkAuto.Checked = AppConfig.AutoStart; chkAuto.SetBounds(12, y, 150, 22); Controls.Add(chkAuto);
         chkMin = new CheckBox(); chkMin.Text = "启动后自动最小化到托盘"; chkMin.Checked = AppConfig.StartMinimized; chkMin.SetBounds(170, y, 200, 22); Controls.Add(chkMin);
         y += 28;
+        chkSound = new CheckBox(); chkSound.Text = "新消息提示音"; chkSound.Checked = AppConfig.SoundEnabled; chkSound.SetBounds(12, y, 150, 22); Controls.Add(chkSound);
+        chkAutoClose = new CheckBox(); chkAutoClose.Text = "Toast超时自动消失"; chkAutoClose.Checked = AppConfig.ToastAutoClose; chkAutoClose.SetBounds(170, y, 200, 22); Controls.Add(chkAutoClose);
+        y += 28;
 
         btnSave = new Button(); btnSave.Text = "保存"; btnSave.SetBounds(12, y, 100, 28);
         btnSave.Click += delegate { SaveSettings(); };
@@ -95,6 +108,11 @@ class MainForm : Form
         Button btnHide = new Button(); btnHide.Text = "最小化到托盘"; btnHide.SetBounds(232, y, 136, 28);
         btnHide.Click += delegate { HideWindow(); };
         Controls.Add(btnHide);
+        y += 34;
+
+        Button btnHist = new Button(); btnHist.Text = "历史消息"; btnHist.SetBounds(12, y, 100, 28);
+        btnHist.Click += delegate { ShowHistory(); };
+        Controls.Add(btnHist);
         y += 34;
 
         lblStatus = new Label(); lblStatus.Text = "就绪"; lblStatus.SetBounds(12, y, 356, 40); Controls.Add(lblStatus);
@@ -117,11 +135,14 @@ class MainForm : Form
         AppConfig.StaySeconds = (int)numStay.Value;
         AppConfig.AutoStart = chkAuto.Checked;
         AppConfig.StartMinimized = chkMin.Checked;
+        AppConfig.SoundEnabled = chkSound.Checked;
+        AppConfig.ToastAutoClose = chkAutoClose.Checked;
         AppConfig.Save();
         ApplyAutoStart(AppConfig.AutoStart);
         pollTimer.Interval = AppConfig.PollSeconds * 1000;
         ToastManager.MaxCount = AppConfig.MaxToasts;
         ToastManager.StaySeconds = AppConfig.StaySeconds;
+        ToastManager.AutoClose = AppConfig.ToastAutoClose;
         lblStatus.Text = "已保存 " + DateTime.Now.ToString("HH:mm:ss");
     }
 
@@ -156,7 +177,11 @@ class MainForm : Form
             foreach (Msg m in msgs)
             {
                 string t = string.IsNullOrEmpty(m.title) ? "(无标题)" : m.title;
-                ToastManager.Show(t, m.body ?? "", m.level ?? "info");
+                string lv = string.IsNullOrEmpty(m.level) ? "info" : m.level;
+                string bd = m.body ?? "";
+                HistoryStore.Append(m);
+                ToastManager.Show(t, bd, lv);
+                Sounder.Notify();
                 n++;
             }
             lblStatus.Text = (n > 0 ? ("收到 " + n + " 条 ") : "无新消息 ") + DateTime.Now.ToString("HH:mm:ss");
@@ -169,6 +194,17 @@ class MainForm : Form
     void ShowWindow()
     {
         Show(); WindowState = FormWindowState.Normal; ShowInTaskbar = true; Activate();
+    }
+
+    void ShowHistory()
+    {
+        try
+        {
+            HistoryForm f = new HistoryForm();
+            f.Show();
+            try { f.Activate(); } catch { }
+        }
+        catch { }
     }
 
     void HideWindow()
