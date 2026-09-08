@@ -73,7 +73,9 @@ static std::wstring MemInfo() {
     pm.cb = sizeof(pm);
     wchar_t b[128];
     b[0] = 0;
-    if (GetProcessMemoryInfo(GetCurrentProcess(), &pm, sizeof(pm)))
+    // cb=sizeof(EX) tells the API to fill the extended fields; the cast
+    // satisfies the Win7-level SDK prototype (K32GetProcessMemoryInfo).
+    if (GetProcessMemoryInfo(GetCurrentProcess(), (PPROCESS_MEMORY_COUNTERS)&pm, sizeof(pm))
         StringCchPrintfW(b, 128, L"内存 工作集%lluMB 私有%lluMB",
             pm.WorkingSetSize / 1048576, pm.PrivateUsage / 1048576);
     return b;
