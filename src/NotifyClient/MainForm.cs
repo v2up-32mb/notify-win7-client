@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
-using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -249,7 +248,7 @@ class MainForm : Form
         string cur = cursor;
         string baseUrl = AppConfig.BaseUrl;
         string secret = AppConfig.Secret;
-        ThreadPool.QueueUserWorkItem(delegate(object _) {
+        System.Threading.ThreadPool.QueueUserWorkItem(delegate(object _) {
             string latest = null, err = null;
             List<Msg> msgs = new List<Msg>();
             try { msgs = Poller.Fetch(baseUrl, secret, cur, out latest, out err); }
