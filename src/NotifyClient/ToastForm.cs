@@ -153,8 +153,8 @@ class ToastForm : Form
         try
         {
             Rectangle wa = Screen.GetWorkingArea(new Point(left, top));
-            if (left + W > wa.Right) left = wa.Right - W - 8;
-            if (top + H > wa.Bottom) top = wa.Bottom - H - 8;
+            if (left + tw > wa.Right) left = wa.Right - tw - 8;
+            if (top + th > wa.Bottom) top = wa.Bottom - th - 8;
             // slide from right
             Location = new Point(wa.Right, top);
             targetTop = top;
