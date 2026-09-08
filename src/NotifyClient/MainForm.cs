@@ -24,7 +24,7 @@ class MainForm : Form
     TextBox txtLog;
     StatusStrip statusStrip;
     ToolStripStatusLabel statusLabel;
-    Button btnSave, btnTest;
+    Button btnSave, btnNotify;
 
     static Icon appIconCache = null;
 
@@ -200,9 +200,9 @@ class MainForm : Form
         btnSave = new Button(); btnSave.Text = "\u4fdd\u5b58"; btnSave.SetBounds(12, y, 100, 28);
         btnSave.Click += delegate { SaveSettings(); };
         Controls.Add(btnSave);
-        btnTest = new Button(); btnTest.Text = "\u6d4b\u8bd5\u62c9\u53d6"; btnTest.SetBounds(122, y, 100, 28);
-        btnTest.Click += delegate { PollOnceAsync(true); };
-        Controls.Add(btnTest);
+        btnNotify = new Button(); btnNotify.Text = "测试通知"; btnNotify.SetBounds(122, y, 100, 28);
+        btnNotify.Click += delegate { TestNotify(); };
+        Controls.Add(btnNotify);
         Button btnHide = new Button(); btnHide.Text = "\u6700\u5c0f\u5316\u5230\u6258\u76d8"; btnHide.SetBounds(232, y, 136, 28);
         btnHide.Click += delegate { HideWindow(); };
         Controls.Add(btnHide);
@@ -267,6 +267,18 @@ class MainForm : Form
         string s = "\u5df2\u4fdd\u5b58 " + DateTime.Now.ToString("HH:mm:ss") + " StartMinimized=" + (AppConfig.StartMinimized ? "1" : "0") + " toast=" + AppConfig.ToastWidth + "x" + AppConfig.ToastHeight;
         SetStatus(s);
         AppendLog(s);
+    }
+
+    void TestNotify()
+    {
+        try
+        {
+            ToastManager.Show("测试通知", "托盘客户端工作正常。\n第二行换行测试。", "info");
+            try { Sounder.Notify(); } catch { }
+            SetStatus("已发送测试通知 " + DateTime.Now.ToString("HH:mm:ss"));
+            AppendLog("已发送测试通知（气泡+提示音）。");
+        }
+        catch (Exception ex) { try { SetStatus("测试通知失败 " + ex.Message); } catch { } }
     }
 
     void ClearLog()
