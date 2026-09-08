@@ -57,11 +57,11 @@ static void LogAppend(const wchar_t* line) {
     std::wstring full = L"[" + Clock() + L"] " + t + L"\r\n";
     int len = GetWindowTextLengthW(g_hLog);
     SendMessageW(g_hLog, EM_SETSEL, (WPARAM)len, (LPARAM)len);
-    SendMessageW(g_hLog, EM_REPLACESELW, FALSE, (LPARAM)full.c_str());
+    SendMessageW(g_hLog, EM_REPLACESEL, FALSE, (LPARAM)full.c_str());
     if (SendMessageW(g_hLog, EM_GETLINECOUNT, 0, 0) > 800) {
         int idx = (int)SendMessageW(g_hLog, EM_LINEINDEX, 300, 0);
         SendMessageW(g_hLog, EM_SETSEL, 0, (LPARAM)idx);
-        SendMessageW(g_hLog, EM_REPLACESELW, FALSE, (LPARAM)L"");
+        SendMessageW(g_hLog, EM_REPLACESEL, FALSE, (LPARAM)L"");
     }
     int e2 = GetWindowTextLengthW(g_hLog);
     SendMessageW(g_hLog, EM_SETSEL, (WPARAM)e2, (LPARAM)e2);
@@ -69,7 +69,7 @@ static void LogAppend(const wchar_t* line) {
 }
 
 static std::wstring MemInfo() {
-    PROCESS_MEMORY_COUNTERS pm;
+    PROCESS_MEMORY_COUNTERS_EX pm;
     pm.cb = sizeof(pm);
     wchar_t b[128];
     b[0] = 0;

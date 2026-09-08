@@ -103,7 +103,7 @@ static bool FetchOnce(const std::wstring& base, const std::wstring& secret,
         DWORD sc = 0;
         DWORD sclen = sizeof(sc);
         WinHttpQueryHeaders(hR, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
-            WINHTTP_NO_HEADER_NAME, &sc, &sclen, WINHTTP_NO_HEADER_INDEX);
+            NULL, &sc, &sclen, NULL);
         for (;;) {
             DWORD avail = 0;
             if (!WinHttpQueryDataAvailable(hR, &avail)) {

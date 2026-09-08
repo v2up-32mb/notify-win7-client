@@ -99,7 +99,6 @@ static void Relayout() {
             SetTimer(t->hwnd, TID_ANIM, 20, NULL); // wake settled toast
         }
     }
-    (void)right;
 }
 
 static void ToastStep(Toast* t) {
