@@ -229,9 +229,8 @@ class MainForm : Form
             else txtLog.Clear();
         }
         catch { }
-        try { HistoryStore.Clear(); } catch { }
         SetStatus("\u65e5\u5fd7\u5df2\u6e05\u7a7a " + DateTime.Now.ToString("HH:mm:ss"));
-        AppendLog("\u65e5\u5fd7\u5df2\u6e05\u7a7a\uff08\u542b\u5386\u53f2\u6587\u4ef6\u3002\uff09");
+        AppendLog("\u65e5\u5fd7\u5df2\u6e05\u7a7a\u3002");
     }
 
     void PollOnce() { PollOnceAsync(false); }
@@ -283,16 +282,6 @@ class MainForm : Form
                 SetStatus(s);
                 AppendLog(s + " cursor=" + cursor);
                 AppendLog(MemInfo());
-                try
-                {
-                    List<HistoryStore.Item> hist = HistoryStore.Load(50);
-                    if (hist.Count > 0)
-                    {
-                        AppendLog("\u2014\u2014 \u6700\u8fd1 " + hist.Count + " \u6761\u5386\u53f2 \u2014\u2014");
-                        for (int i = hist.Count - 1; i >= 0; i--) AppendLog(FormatHistoryItem(hist[i]));
-                    }
-                }
-                catch { }
                 return;
             }
             if (msgs == null || msgs.Count == 0)
@@ -307,7 +296,6 @@ class MainForm : Form
                 string t = string.IsNullOrEmpty(m.title) ? "(\u65e0\u6807\u9898)" : m.title;
                 string lv = string.IsNullOrEmpty(m.level) ? "info" : m.level;
                 string bd = m.body ?? "";
-                try { HistoryStore.Append(m); } catch { }
                 AppendLog(FormatMsgForLog(m));
                 try { ToastManager.Show(SingleLine(t), bd, lv); } catch { }
                 try { Sounder.Notify(); } catch { }
@@ -337,17 +325,6 @@ class MainForm : Form
         if (bd.Length > 2000) bd = bd.Substring(0, 2000) + "...";
         if (bd.Length > 0) return "[" + lv + "] " + t + "\r\n" + bd.Replace("\n", "\r\n");
         return "[" + lv + "] " + t;
-    }
-
-    static string FormatHistoryItem(HistoryStore.Item it)
-    {
-        string lv = it.level ?? "info";
-        string t = SingleLine(it.title ?? "");
-        string bd = (it.body ?? "").Replace("\r\n", "\n").Replace("\r", "\n");
-        int nl = bd.IndexOf('\n');
-        string head = nl >= 0 ? bd.Substring(0, nl) + ".." : bd;
-        if (head.Length > 120) head = head.Substring(0, 120) + "...";
-        return (it.time ?? "") + " [" + lv + "] " + t + (head.Length > 0 ? (" - " + head) : "");
     }
 
     static string Short(string s, int n) { if (s == null) return ""; s = s.Replace("\r", " ").Replace("\n", " "); return s.Length > n ? s.Substring(0, n) + "..." : s; }

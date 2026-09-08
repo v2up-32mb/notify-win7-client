@@ -6,7 +6,8 @@ Lightweight Win7 x86 tray client for notify-center.
 - Polls GET /api/messages?limit=50&since=cursor with Bearer secret
 - Win10-like stacked toasts, close-lower => uppers slide down
 - Config lives in %USERPROFILE%\.notifyclient\config.ini (auto-created)
-- Cursor file cursor.txt (since param), first fetch only syncs cursor
+- Only persisted state is cursor.txt (since param); first fetch only syncs cursor
+- Message log is memory-only (no history file); restart starts with an empty log
 - Run key HKCU autostart
 
 Build: GitHub Actions only (windows-latest msbuild/dotnet). See .github/workflows/build.yml.
@@ -23,8 +24,7 @@ Build: GitHub Actions only (windows-latest msbuild/dotnet). See .github/workflow
   suppressed via SetVisibleCore (no flash), then OnLoad applies
   Hide/Show + first async poll. Requires Application.Run(f).
 - Main window has an embedded read-only multi-line log plus a bottom
-  status strip. There is no separate history dialog. Recent history
-  (last 50) is loaded into the log after the first sync.
+  status strip. There is no separate history dialog and no history file.
 - Status line shows short state (ready / saved / fetch fail / got N);
   details go to the log with timestamps.
 
@@ -34,6 +34,5 @@ Build: GitHub Actions only (windows-latest msbuild/dotnet). See .github/workflow
   Example: {"title":"t","body":"a\nb","level":"info"}.
 - Client chain preserves them: MiniJson decodes \n/\r/\t/\b/\f/\//\uXXXX,
   toast body shows multi-line word-wrapped preview (first 600 chars),
-  main log shows the full multi-line body, history file escapes
-  newlines as \\n so they survive reload.
+  main log shows the full multi-line body (memory-only, discarded on exit).
 - Title is always single-line (newlines become spaces, max 80 chars in toast).

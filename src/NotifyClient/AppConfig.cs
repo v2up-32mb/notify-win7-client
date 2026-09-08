@@ -56,11 +56,6 @@ static class AppConfig
         }
     }
 
-    public static string HistoryFile
-    {
-        get { return Path.Combine(HomeDir, "history.tsv"); }
-    }
-
     static void EnsureDir()
     {
         try { if (!Directory.Exists(HomeDir)) Directory.CreateDirectory(HomeDir); }
