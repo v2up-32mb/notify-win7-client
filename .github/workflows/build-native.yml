@@ -1,0 +1,45 @@
+name: Build NotifyClient Native (Win7 x86)
+
+on:
+  push:
+    branches: [native-win32]
+    tags: ['native-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: native
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup MSVC x86
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+      - name: Compile resources
+        shell: cmd
+        run: rc /nologo /fo app.res app.rc
+      - name: Compile (MSVC x86 /MT, Win7 API level)
+        shell: cmd
+        run: cl /nologo /utf-8 /MT /O1 /Os /DUNICODE /D_UNICODE /DWIN32 /D_WIN32_WINNT=0x0601 /DWINVER=0x0601 /EHsc /GR- /W3 /Fe:NotifyClientNative.exe main.cpp toast.cpp poll.cpp cfg.cpp app.res /link /SUBSYSTEM:WINDOWS /MACHINE:X86 /OPT:REF /OPT:ICF user32.lib gdi32.lib comctl32.lib winhttp.lib shell32.lib psapi.lib
+      - name: Show output
+        shell: pwsh
+        run: Get-ChildItem NotifyClientNative.exe | Select-Object Name, Length
+      - name: Upload exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: NotifyClientNative-win7-x86
+          path: native/NotifyClientNative.exe
+          if-no-files-found: error
+      # Tag push (native-v*) -> publish GitHub Release with the exe attached.
+      - name: Release exe
+        if: startsWith(github.ref, 'refs/tags/native-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: native/NotifyClientNative.exe
+          generate_release_notes: true
