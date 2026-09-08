@@ -11,8 +11,10 @@ struct Toast {
     int alpha, alphaT;
     bool closing, fresh;
     int tw, th;
+    DWORD born;   // GetTickCount at creation: auto-close lifetime origin
+    int stayMs;
     Toast() : hwnd(NULL), ty(0), alpha(0), alphaT(255),
-        closing(false), fresh(true), tw(320), th(110) {}
+        closing(false), fresh(true), tw(320), th(110), born(0), stayMs(10000) {}
 };
 
 static HINSTANCE s_hInst = NULL;
@@ -115,6 +117,12 @@ static void ToastStep(Toast* t) {
     int na = t->alpha;
     if (na < t->alphaT) { na += 30; if (na > t->alphaT) na = t->alphaT; }
     else if (na > t->alphaT) { na -= 38; if (na < t->alphaT) na = t->alphaT; }
+    // Auto-close lifetime (unsigned subtraction is GetTickCount-wrap safe).
+    // Honors the "Toast超时自动消失" checkbox live, like the C# lifeTimer.
+    if (!t->closing && g_cfg.autoClose && (GetTickCount() - t->born >= (DWORD)t->stayMs)) {
+        t->closing = true;
+        t->alphaT = 0;
+    }
     t->alpha = na;
     SetWindowPos(t->hwnd, NULL, nx, ny, 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
     SetLayeredWindowAttributes(t->hwnd, 0, (BYTE)na, LWA_ALPHA);
@@ -241,6 +249,8 @@ void ToastShow(const wchar_t* title, const wchar_t* body, const wchar_t* level) 
     t->level = level ? level : L"info";
     t->tw = TW();
     t->th = TH();
+    t->born = GetTickCount();
+    t->stayMs = (g_cfg.staySec < 3 ? 3 : g_cfg.staySec) * 1000;
     t->hwnd = CreateWindowExW(WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
         (LPCWSTR)MAKEINTATOM(s_cls), L"", WS_POPUP, 0, 0, t->tw, t->th,
         NULL, NULL, s_hInst, t);
