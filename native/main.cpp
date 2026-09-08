@@ -22,6 +22,7 @@ enum {
     IDC_LOG, IDM_OPEN = 2001, IDM_TEST, IDM_QUIT
 };
 #define WM_APP_TRAY (WM_APP + 100)
+#define TID_MEM 2
 #define TRAY_UID 1
 
 static HINSTANCE g_hInst = NULL;
@@ -85,6 +86,12 @@ static std::wstring MemInfo() {
     return b;
 }
 
+static void UpdateMemStatus() {
+    if (!g_hStatus) return;
+    std::wstring m = MemInfo();
+    if (!m.empty()) SendMessageW(g_hStatus, SB_SETTEXTW, 1, (LPARAM)m.c_str());
+}
+
 static void TrimWorkingSet() {
     EmptyWorkingSet(GetCurrentProcess());
 }
@@ -146,7 +153,6 @@ static void ApplyPoll(PollResult* pr) {
             LogAppend((s + L" 游标=" + NUtf8ToWide(pr->latest)).c_str());
         else
             LogAppend((s + L" 游标=(空，暂无消息)").c_str());
-        LogAppend(MemInfo().c_str());
         return;
     }
     if (pr->msgs.empty()) {
@@ -304,8 +310,11 @@ static void BuildControls() {
     g_hStatus = CreateWindowExW(0, STATUSCLASSNAMEW, NULL, WS_CHILD | WS_VISIBLE,
         0, rc.bottom - 22, rc.right, 22, g_hMain, NULL, g_hInst, NULL);
     if (g_hStatus) {
-        int parts = rc.right > 0 ? rc.right : 520;
-        SendMessageW(g_hStatus, SB_SETPARTS, 1, (LPARAM)&parts);
+        // Two parts: left status text, right memory readout (~220px).
+        int edges[2];
+        edges[0] = (rc.right > 220 ? rc.right : 520) - 220;
+        edges[1] = -1;
+        SendMessageW(g_hStatus, SB_SETPARTS, 2, (LPARAM)edges);
     }
     Status(L"就绪");
 }
@@ -361,6 +370,9 @@ static LRESULT CALLBACK MainWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
         }
         case WM_SIZE:
             if (w == SIZE_MINIMIZED) HideMain();
+            return 0;
+        case WM_TIMER:
+            if (w == TID_MEM) UpdateMemStatus();
             return 0;
         case WM_CLOSE:
             HideMain(); // X only hides to tray; real quit is the tray menu
@@ -450,6 +462,8 @@ int WINAPI wWinMain(HINSTANCE h, HINSTANCE, LPWSTR, int) {
     if (!g_cfg.secret[0]) LogAppend(L"尚未配置 Secret，请在上面填写后点保存。");
     if (!g_cfg.startMin) { ShowWindow(g_hMain, SW_SHOW); UpdateWindow(g_hMain); }
     PollStart(g_hMain);
+    UpdateMemStatus(); // paint immediately instead of waiting 10s
+    SetTimer(g_hMain, TID_MEM, 10000, NULL);
     MSG msg;
     while (GetMessageW(&msg, NULL, 0, 0) > 0) {
         TranslateMessage(&msg);
