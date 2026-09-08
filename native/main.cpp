@@ -289,6 +289,10 @@ static void BuildControls() {
     GetClientRect(g_hMain, &rc);
     g_hStatus = CreateWindowExW(0, STATUSCLASSNAMEW, NULL, WS_CHILD | WS_VISIBLE,
         0, rc.bottom - 22, rc.right, 22, g_hMain, NULL, g_hInst, NULL);
+    if (g_hStatus) {
+        int parts = rc.right > 0 ? rc.right : 520;
+        SendMessageW(g_hStatus, SB_SETPARTS, 1, (LPARAM)&parts);
+    }
     Status(L"就绪");
 }
 
@@ -327,6 +331,10 @@ static void TrayMenu() {
 static LRESULT CALLBACK MainWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     switch (m) {
         case WM_CREATE:
+            // WM_CREATE fires inside CreateWindowEx, before it returns, so the
+            // global is still NULL here: without this every WS_CHILD control
+            // gets a NULL parent, creation fails, and the window stays blank.
+            g_hMain = h;
             BuildControls();
             return 0;
         case WM_COMMAND: {
@@ -404,6 +412,7 @@ int WINAPI wWinMain(HINSTANCE h, HINSTANCE, LPWSTR, int) {
     wc.lpfnWndProc = MainWndProc;
     wc.hInstance = h;
     wc.hIcon = LoadIconW(h, MAKEINTRESOURCEW(IDI_APPICON));
+    if (!wc.hIcon) wc.hIcon = LoadIcon(NULL, IDI_APPLICATION);
     wc.hIconSm = wc.hIcon;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);

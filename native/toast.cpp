@@ -169,6 +169,13 @@ static void PaintToast(HWND h, Toast* t) {
 static LRESULT CALLBACK ToastWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
     Toast* t = (Toast*)GetWindowLongPtrW(h, GWLP_USERDATA);
     switch (m) {
+        case WM_CREATE: {
+            // lpCreateParams carries the Toast*: without storing it every
+            // handler below sees NULL (no paint, no click, no timer).
+            CREATESTRUCTW* cs = (CREATESTRUCTW*)l;
+            SetWindowLongPtrW(h, GWLP_USERDATA, (LONG_PTR)cs->lpCreateParams);
+            return 0;
+        }
         case WM_PAINT: PaintToast(h, t); return 0;
         case WM_LBUTTONDOWN:
             if (t && !t->closing) {
