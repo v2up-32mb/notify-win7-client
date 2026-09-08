@@ -3,7 +3,11 @@ name: Build NotifyClient (Win7 x86)
 on:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -34,3 +38,11 @@ jobs:
           name: NotifyClient-win7-x86
           path: src/NotifyClient/bin/**/NotifyClient.exe
           if-no-files-found: error
+      # Tag push (v*) -> publish GitHub Release with the exe attached.
+      # Main-branch pushes only build + upload artifact, no release (avoid spam).
+      - name: Release exe
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: src/NotifyClient/bin/**/NotifyClient.exe
+          generate_release_notes: true
