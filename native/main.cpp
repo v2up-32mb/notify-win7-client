@@ -77,8 +77,11 @@ static std::wstring MemInfo() {
     // satisfies the Win7-level SDK prototype (K32GetProcessMemoryInfo).
     BOOL gmiOk = GetProcessMemoryInfo(GetCurrentProcess(), (PPROCESS_MEMORY_COUNTERS)&pm, sizeof(pm));
     if (gmiOk)
+        // SIZE_T is 32-bit in x86 builds: cast before %llu, otherwise printf
+        // reads 8 bytes (value + stack garbage) and prints nonsense like 47GB.
         StringCchPrintfW(b, 128, L"内存 工作集%lluMB 私有%lluMB",
-            pm.WorkingSetSize / 1048576, pm.PrivateUsage / 1048576);
+            (unsigned long long)(pm.WorkingSetSize / 1048576),
+            (unsigned long long)(pm.PrivateUsage / 1048576));
     return b;
 }
 
@@ -139,7 +142,10 @@ static void ApplyPoll(PollResult* pr) {
     if (pr->first) {
         std::wstring s = L"连接正常 " + Clock() + L" (首轮仅同步游标，不打扰)";
         Status(s.c_str());
-        LogAppend((s + L" 游标=" + NUtf8ToWide(pr->latest)).c_str());
+        if (!pr->latest.empty())
+            LogAppend((s + L" 游标=" + NUtf8ToWide(pr->latest)).c_str());
+        else
+            LogAppend((s + L" 游标=(空，暂无消息)").c_str());
         LogAppend(MemInfo().c_str());
         return;
     }
@@ -157,8 +163,16 @@ static void ApplyPoll(PollResult* pr) {
         std::wstring bd = NUtf8ToWide(m.body);
         ToastShow(t.c_str(), bd.c_str(), lv.c_str());
         if (g_cfg.sound) MessageBeep(MB_ICONASTERISK);
+        // One log line per message: collapse body newlines to spaces.
+        // (Full multi-line body stays visible in the toast itself.)
+        std::wstring head;
+        for (size_t k = 0; k < bd.size(); ++k) {
+            wchar_t c = bd[k];
+            head += (c == L'\r' || c == L'\n' || c == L'\t') ? L' ' : c;
+        }
+        if (head.size() > 200) { head.resize(200); head += L"..."; }
         std::wstring line = L"[" + lv + L"] " + t;
-        if (!bd.empty()) line += L"\n" + bd;
+        if (!head.empty()) line += L" — " + head;
         LogAppend(line.c_str());
         ++n;
     }

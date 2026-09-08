@@ -55,6 +55,11 @@ void ToastReloadFonts() {
         CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY, DEFAULT_PITCH | FF_DONTCARE,
         L"Microsoft YaHei");
     if (f) s_fBody = f;
+    // Re-arm settled toasts (e.g. user just enabled auto-close on save).
+    for (size_t i = 0; i < s_list.size(); ++i) {
+        Toast* t = s_list[i];
+        if (!t->closing) SetTimer(t->hwnd, TID_ANIM, 20, NULL);
+    }
 }
 
 static void ToastRemove(HWND hwnd) {
@@ -131,8 +136,14 @@ static void ToastStep(Toast* t) {
         ToastRemove(t->hwnd);
         return;
     }
-    if (!t->closing && nx == wantX && ny == t->ty && na == 255)
-        KillTimer(t->hwnd, TID_ANIM);
+    if (!t->closing && nx == wantX && ny == t->ty && na == 255) {
+        // Settled: stop the timer only when auto-close is off. With it on,
+        // the lifetime check above runs on ticks -- a stopped timer would
+        // never fire it, and a lone toast (e.g. the test button) would stay
+        // forever. Churned toasts only appeared to work (each newcomer woke
+        // the others via Relayout).
+        if (!g_cfg.autoClose) KillTimer(t->hwnd, TID_ANIM);
+    }
 }
 
 static void PaintToast(HWND h, Toast* t) {
