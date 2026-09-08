@@ -20,6 +20,8 @@ class MainForm : Form
     Label lblStatus;
     Button btnSave, btnTest;
 
+    bool shownInit = false;
+
     public MainForm()
     {
         cursor = AppConfig.LoadCursor();
@@ -33,16 +35,17 @@ class MainForm : Form
         pollTimer.Interval = Math.Max(2, AppConfig.PollSeconds) * 1000;
         pollTimer.Tick += delegate { PollOnce(); };
         pollTimer.Start();
-        if (AppConfig.StartMinimized)
-        {
-            HideWindow();
-        }
-        else
-        {
-            ShowWindow();
-        }
-        // initial fetch in background-ish (sync is fine, fast fail)
-        BeginInvoke((MethodInvoker)delegate { PollOnce(); });
+        Shown += delegate {
+            if (shownInit) return;
+            shownInit = true;
+            try
+            {
+                if (AppConfig.StartMinimized) HideWindow();
+                else ShowWindow();
+            }
+            catch { }
+            try { PollOnce(); } catch { }
+        };
     }
 
     void InitTray()
