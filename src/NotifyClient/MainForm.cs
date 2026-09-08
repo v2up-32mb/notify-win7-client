@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -281,6 +282,7 @@ class MainForm : Form
                 string s = "\u8fde\u63a5\u6b63\u5e38 " + DateTime.Now.ToString("HH:mm:ss") + " (\u9996\u8f6e\u4ec5\u540c\u6b65\u6e38\u6807\uff0c\u4e0d\u6253\u6270)";
                 SetStatus(s);
                 AppendLog(s + " cursor=" + cursor);
+                AppendLog(MemInfo());
                 try
                 {
                     List<HistoryStore.Item> hist = HistoryStore.Load(50);
@@ -296,6 +298,7 @@ class MainForm : Form
             if (msgs == null || msgs.Count == 0)
             {
                 SetStatus("\u65e0\u65b0\u6d88\u606f " + DateTime.Now.ToString("HH:mm:ss"));
+                try { if (!Visible || !ShowInTaskbar) TrimWorkingSet(); } catch { }
                 return;
             }
             int n = 0;
@@ -311,6 +314,7 @@ class MainForm : Form
                 n++;
             }
             SetStatus("\u6536\u5230 " + n + " \u6761 " + DateTime.Now.ToString("HH:mm:ss"));
+            try { if (!Visible || !ShowInTaskbar) TrimWorkingSet(); } catch { }
         }
         catch (Exception ex)
         {
@@ -364,7 +368,7 @@ class MainForm : Form
         catch { try { Show(); } catch { } }
     }
 
-    void HideWindow() { try { Hide(); ShowInTaskbar = false; } catch { } }
+    void HideWindow() { try { Hide(); ShowInTaskbar = false; } catch { } try { TrimWorkingSet(); } catch { } }
 
     void Quit()
     {
@@ -409,6 +413,35 @@ class MainForm : Form
             else statusLabel.Text = t;
         }
         catch { }
+    }
+
+    [DllImport("psapi.dll")]
+    static extern bool EmptyWorkingSet(IntPtr hProcess);
+
+    static void TrimWorkingSet()
+    {
+        try
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            GC.Collect(0, GCCollectionMode.Optimized);
+            try { EmptyWorkingSet(System.Diagnostics.Process.GetCurrentProcess().Handle); }
+            catch { }
+        }
+        catch { }
+    }
+
+    static string MemInfo()
+    {
+        try
+        {
+            var p = System.Diagnostics.Process.GetCurrentProcess();
+            long ws = p.WorkingSet64 / 1024 / 1024;
+            long pv = p.PrivateMemorySize64 / 1024 / 1024;
+            long gc = GC.GetTotalMemory(false) / 1024;
+            return "\u5185\u5b58 \u5de5\u4f5c\u96c6" + ws + "MB \u79c1\u6709" + pv + "MB \u6258\u7ba1" + gc + "KB";
+        }
+        catch { return ""; }
     }
 
     static void ApplyAutoStart(bool on)

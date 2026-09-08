@@ -11,6 +11,7 @@ using System.Text;
 static class HistoryStore
 {
     const int MAX_ROWS = 500;
+    static int appendsSinceTrim = 0;
 
     public class Item
     {
@@ -27,7 +28,8 @@ static class HistoryStore
                 + "\t" + Clean(m.title)
                 + "\t" + Clean(m.body);
             File.AppendAllText(AppConfig.HistoryFile, line + "\r\n", Encoding.UTF8);
-            Trim();
+            // Trim() re-reads the whole file; doing it on every message is pure GC/file churn.
+            if (++appendsSinceTrim % 20 == 0) Trim();
         }
         catch { }
     }

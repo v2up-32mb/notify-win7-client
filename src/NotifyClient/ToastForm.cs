@@ -21,6 +21,10 @@ class ToastForm : Form
     public int TargetTop { get { return targetTop; } set { targetTop = value; } }
     public const int W = 320, H = 110;
 
+    // Cached: one toast used to allocate 2 Fonts; with many messages GDI/font handles piled up.
+    static readonly Font TitleFont = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold);
+    static readonly Font BodyFont = new Font(FontFamily.GenericSansSerif, 9, FontStyle.Regular);
+
     public ToastForm(string t, string b, string lv)
     {
         title = SingleLine(t ?? "", 80);
@@ -42,7 +46,7 @@ class ToastForm : Form
 
         lblTitle = new Label();
         lblTitle.Text = title;
-        lblTitle.Font = new Font(FontFamily.GenericSansSerif, 10, FontStyle.Bold);
+        lblTitle.Font = TitleFont;
         lblTitle.ForeColor = Color.FromArgb(0x21, 0x21, 0x21);
         lblTitle.AutoSize = false;
         lblTitle.SetBounds(14, 8, 268, 20);
@@ -50,7 +54,7 @@ class ToastForm : Form
 
         txtBody = new TextBox();
         txtBody.Text = body.Replace("\n", "\r\n");
-        txtBody.Font = new Font(FontFamily.GenericSansSerif, 9, FontStyle.Regular);
+        txtBody.Font = BodyFont;
         txtBody.ForeColor = Color.FromArgb(0x42, 0x42, 0x42);
         txtBody.BackColor = Color.White;
         txtBody.BorderStyle = BorderStyle.None;

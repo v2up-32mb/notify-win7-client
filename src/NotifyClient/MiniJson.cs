@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 // Minimal JSON scanner: only understands what /api/messages returns.
 // Avoids System.Web.Extensions / Newtonsoft => smaller exe + less memory.
@@ -71,7 +72,7 @@ static class MiniJson
         if (colon < 0) return "";
         int q1 = obj.IndexOf('"', colon + 1);
         if (q1 < 0) return "";
-        StringBuilder2 sb = null;
+        StringBuilder sb = null;
         int i = q1 + 1;
         string plain = null;
         // fast path: no escapes
@@ -82,7 +83,7 @@ static class MiniJson
             if (c == '"') { plain = obj.Substring(q1 + 1, i - q1 - 1); break; }
         }
         if (plain != null) return plain;
-        sb = new StringBuilder2();
+        sb = new StringBuilder(256);
         for (i = q1 + 1; i < obj.Length; i++)
         {
             char c = obj[i];
@@ -126,12 +127,5 @@ static class MiniJson
         return v;
     }
 
-    // tiny string builder to avoid System.Text.StringBuilder overhead myths? (actually just thin wrapper)
-    class StringBuilder2
-    {
-        string s = "";
-        public void Append(char c) { s += c; }
-        public void Append(string t) { s += t; }
-        public override string ToString() { return s; }
-    }
+
 }
