@@ -1,6 +1,6 @@
 {
   "name": "notify-center",
-  "version": "2.1.0",
+  "version": "2.3.0",
   "description": "C/S 起泡通知系统 S 端 API。AI/开发者阅读本文件 + 持有对应 token，即可编写生产者或消费者。",
   "base_urls": {
     "cloud": "https://<你的worker>.workers.dev",
@@ -9,7 +9,7 @@
   "auth": {
     "summary": "三级 Bearer Token，请求头 Authorization: Bearer <token>。KV 存 sha256 用于校验，同时保存明文供管理后台展示（与 ADMIN_TOKEN 同一信任级别）。",
     "schemes": [
-      { "kind": "admin", "prefix": "adm_", "how": "本地看 client/.admin_token；线上 wrangler secret put ADMIN_TOKEN", "can": ["配发/轮换/吊销身份", "发送消息", "拉取全部消息", "清空消息"] },
+      { "kind": "admin", "prefix": "adm_", "how": "本地 wrangler dev 或线上 wrangler secret put ADMIN_TOKEN", "can": ["配发/编辑/轮换/吊销身份", "分组重命名", "发送消息", "拉取全部消息", "清空消息"] },
       { "kind": "producer", "prefix": "ps_", "how": "管理员配发：POST /api/admin/producers", "can": ["发送消息"] },
       { "kind": "client", "prefix": "cs_", "how": "管理员配发并绑定分组：POST /api/admin/clients", "can": ["拉取自己可见范围的消息"] }
     ],
@@ -46,9 +46,12 @@
     { "method": "POST", "path": "/api/admin/producers", "auth": "admin", "summary": "配发生产者（?rotate=yes 换令牌）", "body": {"name": "监控系统"}, "response": {"ok": true, "name": "监控系统", "token": "ps_…"} },
     { "method": "PUT", "path": "/api/admin/producers", "auth": "admin", "summary": "编辑生产者：改名 / 换令牌", "body": {"name": "监控系统", "new_name": "新名字", "rotate": true}, "response": {"ok": true, "name": "新名字", "token": "ps_…"} },
     { "method": "DELETE", "path": "/api/admin/producers?name=<name>", "auth": "admin", "summary": "删除生产者（令牌立即失效）", "response": {"ok": true, "revoked": "监控系统"} },
-    { "method": "POST", "path": "/api/admin/clients[?rotate=yes]", "auth": "admin", "summary": "配发/轮换客户端（绑定分组）", "body": {"client_id": "pc-01", "groups": ["运维", "值班"]}, "response": {"ok": true, "client_id": "pc-01", "groups": ["运维"], "secret": "cs_…"} },
+    { "method": "POST", "path": "/api/admin/clients[?rotate=yes]", "auth": "admin", "summary": "配发/轮换客户端（绑定分组；轮换不传 groups 则保留原分组）", "body": {"client_id": "pc-01", "groups": ["运维", "值班"]}, "response": {"ok": true, "client_id": "pc-01", "groups": ["运维"], "secret": "cs_…"} },
+    { "method": "PUT", "path": "/api/admin/clients", "auth": "admin", "summary": "编辑客户端：改 ID / 改分组 / 换密钥（可组合；历史消息不追改）", "body": {"client_id": "pc-01", "new_id": "pc-02", "groups": ["运维"], "rotate": true}, "response": {"ok": true, "client_id": "pc-02", "groups": ["运维"], "secret": "cs_…", "rotated": false, "renamed": true} },
+    { "method": "PUT", "path": "/api/admin/groups", "auth": "admin", "summary": "分组重命名：批量更新组内所有客户端分组及令牌（历史消息不追改）", "body": {"old_name": "运维", "new_name": "运维值班"}, "response": {"ok": true, "old": "运维", "new": "运维值班", "affected": ["pc-01"], "count": 1} },
     { "method": "DELETE", "path": "/api/admin/clients?id=<id>", "auth": "admin", "summary": "吊销客户端", "response": {"ok": true, "revoked": "pc-01"} },
-    { "method": "GET", "path": "/api/admin/overview", "auth": "admin", "summary": "概况（含全部密钥/令牌，可随时查看复制）", "response": {"ok": true, "messages": 10, "clients": [{"id": "pc-01", "groups": ["运维"], "secret": "cs_…"}], "producers": [{"name": "监控系统", "token": "ps_…"}]} }
+    { "method": "POST", "path": "/api/admin/cleanup", "auth": "admin", "summary": "手动清理历史消息（dry_run 只预览；keep_days=0 只留今天，删昨天及更早；定时任务每天北京时间04:00自动执行keep_days=0）", "body": {"keep_days": 0, "dry_run": true}, "response": {"ok": true, "dry_run": true, "cutoff_beijing": "2026-09-08 00:00", "keep_days": 0, "checked": 10, "deleted": 3, "orphans": 0, "kept": 7} },
+    { "method": "GET", "path": "/api/admin/overview", "auth": "admin", "summary": "概况（含全部密钥/令牌、分组汇总与上次清理，可随时查看复制）", "response": {"ok": true, "messages": 10, "clients": [{"id": "pc-01", "groups": ["运维"], "secret": "cs_…"}], "producers": [{"name": "监控系统", "token": "ps_…"}], "groups": [{"name": "运维", "count": 1, "clients": ["pc-01"]}], "cleanup": {"at": 0, "cutoff": 0, "keep_days": 0, "deleted": 3, "orphans": 0, "kept": 7}} }
   ],
   "examples": [
     { "id": "curl-producer", "title": "生产者：curl 发送（分组定向）", "lang": "bash",

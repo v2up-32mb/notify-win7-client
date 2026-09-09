@@ -3,3 +3,7 @@ obj/
 .vs/
 .local/
 dist/
+# 本地部署私密配置（KV id、域名、[vars]），不进仓库；模板见 server/wrangler.example.toml
+server/wrangler.toml
+server/.wrangler/
+server/.dev.vars

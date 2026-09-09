@@ -1,0 +1,32 @@
+# NotifyCenter 部署配置模板：复制为 wrangler.toml 后填入真实值使用。
+#   cp wrangler.example.toml wrangler.toml
+# wrangler.toml 已加入 .gitignore，不会进仓库；管理口令请用 secret 方式设置：
+#   wrangler secret put ADMIN_TOKEN
+name = "notify-center"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+workers_dev = true
+
+# 自定义域名（声明式管理，部署不会再丢；注意：顶层 key 必须放在所有 [vars]/[[...]] 表头前面）
+# 把下面两处换成你自己的域名与 zone；不需要自定义域名可整段删掉（只用 workers.dev）。
+routes = [
+  { pattern = "notify.example.com", zone_name = "example.com", custom_domain = true }
+]
+
+# 管理后台 admin.html 与接口定义 api_spec.json 以文本形式打进 Worker
+[[rules]]
+type = "Text"
+globs = ["**/*.html", "**/*.json"]
+
+# 定时清理：Cron 按 UTC 解析，0 20 * * * = 北京时间每天 04:00，
+# 触发 worker 的 scheduled()，删掉昨天及更早的历史消息（只留今天）。
+[triggers]
+crons = ["0 20 * * *"]
+
+# KV：先执行下面两行拿到真实 id，回填到本地 wrangler.toml（不要提交）：
+#   wrangler kv:namespace create NOTIFY_KV
+#   wrangler kv:namespace create NOTIFY_KV --preview
+[[kv_namespaces]]
+binding = "NOTIFY_KV"
+id = "FILL_ME_PROD_KV_ID"
+preview_id = "FILL_ME_PREVIEW_KV_ID"

@@ -71,6 +71,7 @@
   <div class="tabs">
     <button data-tab="tOver" class="active">概览</button>
     <button data-tab="tClient">客户端</button>
+    <button data-tab="tGroup">分组管理</button>
     <button data-tab="tProd">生产者</button>
     <button data-tab="tSend">发送消息</button>
     <button data-tab="tMsgs">最近消息</button>
@@ -82,12 +83,23 @@
     <div class="grid">
       <div class="stat"><div class="n" id="sMsg">-</div><div class="l">消息总数</div></div>
       <div class="stat"><div class="n" id="sCli">-</div><div class="l">客户端数</div></div>
+      <div class="stat"><div class="n" id="sGrp">-</div><div class="l">分组数</div></div>
       <div class="stat"><div class="n" id="sPro">-</div><div class="l">生产者数</div></div>
     </div>
     <div class="row" style="margin-top:12px">
       <button id="btnRefresh" class="ghost">刷新概况</button>
       <button id="btnClear" class="danger">清空全部消息</button>
     </div>
+    <div class="formline" style="margin-top:12px">
+      <label>历史清理</label>
+      <span style="font-size:13px;color:#555">保留</span>
+      <input type="text" id="keepDays" value="0" style="width:50px;min-width:50px" title="保留天数：0=只留今天（删昨天及更早）">
+      <span style="font-size:13px;color:#555">天</span>
+      <button id="btnCleanupPreview" class="ghost">预览清理</button>
+      <button id="btnCleanupRun" class="ghost">执行清理</button>
+      <span id="cleanupResult" style="font-size:13px;color:#555"></span>
+    </div>
+    <div id="lastCleanup" style="font-size:12px;color:#999;margin-top:6px">定时任务每天北京时间 04:00 自动清理（只留今天）。</div>
   </div>
 
   <div class="card" id="tClient" style="display:none">
@@ -100,6 +112,15 @@
     <table>
       <thead><tr><th>客户端</th><th>分组</th><th>密钥</th><th>操作</th></tr></thead>
       <tbody id="cliRows"><tr><td colspan="4">登录后加载…</td></tr></tbody>
+    </table>
+  </div>
+
+  <div class="card" id="tGroup" style="display:none">
+    <h2>分组管理（重命名即批量更新组内所有客户端）</h2>
+    <div style="color:#666;font-size:13px;margin-bottom:10px">分组由客户端归属聚合而来；重命名只改客户端归属与令牌，历史消息不追改，后续投递按新分组计算。</div>
+    <table>
+      <thead><tr><th>分组</th><th>客户端数</th><th>成员</th><th>操作</th></tr></thead>
+      <tbody id="grpRows"><tr><td colspan="4">登录后加载…</td></tr></tbody>
     </table>
   </div>
 
@@ -230,7 +251,7 @@ Array.prototype.forEach.call(document.querySelectorAll(".tabs button"), function
       b.classList.remove("active");
     });
     btn.classList.add("active");
-    ["tOver", "tClient", "tProd", "tSend", "tMsgs", "tApi"].forEach(function (id) {
+    ["tOver", "tClient", "tGroup", "tProd", "tSend", "tMsgs", "tApi"].forEach(function (id) {
       $(id).style.display = (id === btn.getAttribute("data-tab")) ? "block" : "none";
     });
   });
@@ -263,8 +284,14 @@ function loadOverview() {
     $("sMsg").textContent = d.messages;
     $("sCli").textContent = d.clients.length;
     $("sPro").textContent = d.producers.length;
+    $("sGrp").textContent = (d.groups || []).length;
     renderClients(d.clients);
+    renderGroups(d.groups || []);
     renderProds(d.producers);
+    var lc = d.cleanup;
+    $("lastCleanup").textContent = (lc && lc.at)
+      ? "上次清理：" + fmtTs(lc.at) + "，删除 " + lc.deleted + " 条，孤儿 id " + lc.orphans + " 个，保留 " + lc.kept + " 条"
+      : "尚未执行过定时/手动清理（定时任务每天北京时间 04:00 自动清理，只留今天）。";
   }).catch(function (e) { banner(String(e.message || e)); });
 }
 $("btnRefresh").addEventListener("click", refreshAll);
@@ -275,6 +302,37 @@ $("btnClear").addEventListener("click", function () {
   api("DELETE", "/api/messages", null, { confirm: "yes" }).then(function (d) {
     alert("已清空 " + d.cleared + " 条"); loadOverview();
   }).catch(function (e) { banner(String(e.message || e)); });
+});
+function parseKeepDays() {
+  var kd = parseInt($("keepDays").value, 10);
+  if (isNaN(kd) || kd < 0) kd = 0;
+  if (kd > 30) kd = 30;
+  $("keepDays").value = kd;
+  return kd;
+}
+function fmtCleanup(r) {
+  return (r.dry_run ? "【预览】" : "") + "分界 " + r.cutoff_beijing +
+    "，删除 " + r.deleted + " 条，孤儿 id " + r.orphans + " 个，保留 " + r.kept + " 条";
+}
+$("btnCleanupPreview").addEventListener("click", function () {
+  if (needLogin()) return;
+  var kd = parseKeepDays();
+  $("cleanupResult").textContent = "统计中…";
+  api("POST", "/api/admin/cleanup", { keep_days: kd, dry_run: true }).then(function (d) {
+    $("cleanupResult").textContent = fmtCleanup(d);
+  }).catch(function (e) { banner(String(e.message || e)); $("cleanupResult").textContent = ""; });
+});
+$("btnCleanupRun").addEventListener("click", function () {
+  if (needLogin()) return;
+  var kd = parseKeepDays();
+  if (!confirm("确定执行清理吗？keep_days=" + kd + "（0=只留今天，删昨天及更早）。建议先点“预览清理”确认数量。")) return;
+  $("cleanupResult").textContent = "清理中…";
+  api("POST", "/api/admin/cleanup", { keep_days: kd }).then(function (d) {
+    $("cleanupResult").textContent = fmtCleanup(d);
+    showSecret("🧹 清理完成：分界 <b>" + esc(d.cutoff_beijing) + "</b>，删除 <b>" + d.deleted +
+      "</b> 条，孤儿 id " + d.orphans + " 个，保留 " + d.kept + " 条。");
+    loadOverview();
+  }).catch(function (e) { banner(String(e.message || e)); $("cleanupResult").textContent = ""; });
 });
 
 // ---- 客户端 ----
@@ -304,6 +362,7 @@ function renderClients(clients) {
       (sec ? '<button class="small ghost" data-cshow="' + i + '" data-sec="' + esc(sec) + '">显示</button> ' +
         '<button class="small ghost" data-ccopy="' + esc(sec) + '">复制密钥</button>' : "") + "</td><td>" +
       '<button class="small" data-ccfg="' + esc(id) + '" data-sec="' + esc(sec) + '" data-g="' + esc(groups) + '">复制config.json</button> ' +
+      '<button class="small ghost" data-cedit="' + esc(id) + '" data-g="' + esc(groups) + '">编辑</button> ' +
       '<button class="small ghost" data-rot="' + esc(id) + '">轮换密钥</button> ' +
       '<button class="small danger" data-del="' + esc(id) + '">吊销</button></td></tr>';
   }).join("");
@@ -332,6 +391,9 @@ function renderClients(clients) {
       copyText(txt, b);
     });
   });
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-cedit]"), function (b) {
+    b.addEventListener("click", function () { editClient(b.getAttribute("data-cedit"), b.getAttribute("data-g") || ""); });
+  });
   Array.prototype.forEach.call(tb.querySelectorAll("[data-rot]"), function (b) {
     b.addEventListener("click", function () { rotateClient(b.getAttribute("data-rot")); });
   });
@@ -355,11 +417,57 @@ function provisionClient(isRotate) {
   }).catch(function (e) { banner(String(e.message || e)); });
 }
 function rotateClient(cid) {
-  if (!confirm("轮换 " + cid + " 的密钥？旧密钥立即失效，该电脑需更新配置。")) return;
+  if (!confirm("轮换 " + cid + " 的密钥？旧密钥立即失效，该电脑需更新配置（分组保留）。")) return;
   if (needLogin()) return;
-  api("POST", "/api/admin/clients", { client_id: cid, groups: "" }, { rotate: "yes" }).then(function (d) {
-    showSecret("✅ " + esc(cid) + " 新密钥（已保存，下表可随时显示/复制）：<br><code>" + esc(d.secret) +
-      "</code><br>分组已重置，如需分组请重新配发。");
+  // 用 PUT 且不带 groups：只换密钥，保留原分组
+  api("PUT", "/api/admin/clients", { client_id: cid, rotate: true }).then(function (d) {
+    showSecret("✅ " + esc(cid) + " 新密钥（已保存，下表可随时显示/复制，分组保留）：<br><code>" + esc(d.secret) + "</code>");
+    loadOverview();
+  }).catch(function (e) { banner(String(e.message || e)); });
+}
+function editClient(cid, curGroups) {
+  var nn = prompt("客户端改 ID（不改请直接确定）：", cid);
+  if (nn == null) return;
+  nn = nn.trim();
+  if (!nn) { banner("新 ID 不能为空"); return; }
+  var ng = prompt("分组（逗号分隔，不改请直接确定）：", curGroups || "");
+  if (ng == null) return;
+  var body = { client_id: cid };
+  if (nn !== cid) body.new_id = nn;
+  // 只要用户点了确定就按输入值更新分组（含清空为无分组）
+  body.groups = ng;
+  if (needLogin()) return;
+  banner();
+  api("PUT", "/api/admin/clients", body).then(function (d) {
+    var msg = "✅ 客户端已更新：<b>" + esc(cid) + "</b>";
+    if (d.renamed) msg += " → <b>" + esc(d.client_id) + "</b>";
+    msg += "，分组 <b>" + esc((d.groups || []).join(",")) + "</b>（密钥不变，历史消息不追改）";
+    showSecret(msg);
+    loadOverview();
+  }).catch(function (e) { banner(String(e.message || e)); });
+}
+function renderGroups(groups) {
+  var tb = $("grpRows");
+  if (!groups.length) { tb.innerHTML = '<tr><td colspan="4">暂无分组，先给客户端绑定分组吧</td></tr>'; return; }
+  tb.innerHTML = groups.map(function (g) {
+    var members = (g.clients || []).map(function (c) { return '<span class="tag g">' + esc(c) + "</span>"; }).join("");
+    return "<tr><td><b>" + esc(g.name) + "</b></td><td>" + g.count + "</td><td>" + members + "</td>" +
+      '<td><button class="small ghost" data-gren="' + esc(g.name) + '">重命名</button></td></tr>';
+  }).join("");
+  Array.prototype.forEach.call(tb.querySelectorAll("[data-gren]"), function (b) {
+    b.addEventListener("click", function () { renameGroup(b.getAttribute("data-gren")); });
+  });
+}
+function renameGroup(oldName) {
+  var nn = prompt("分组重命名（批量更新组内所有客户端）：\n" + oldName + " → ?", oldName);
+  if (nn == null) return;
+  nn = nn.trim();
+  if (!nn || nn === oldName) return;
+  if (needLogin()) return;
+  banner();
+  api("PUT", "/api/admin/groups", { old_name: oldName, new_name: nn }).then(function (d) {
+    showSecret("✅ 分组已重命名：<b>" + esc(d.old) + "</b> → <b>" + esc(d.new) + "</b>，共更新 " + d.count +
+      " 个客户端（" + esc((d.affected || []).join(", ")) + "），历史消息不追改。");
     loadOverview();
   }).catch(function (e) { banner(String(e.message || e)); });
 }

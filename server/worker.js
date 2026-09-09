@@ -60,8 +60,15 @@ function specMarkdown() {
  *   msg:<id>            单条消息 JSON（含 to，expirationTtl 7天）
  *   index               全部 id 数组（旧→新，上限 500）
  *   auth:<sha256>       令牌记录 {kind:"client"|"producer", id, groups?}
- *   clients             已配发客户端表 {<id>: {groups:[], created}}
- *   producers           已配发生产者名数组 [name...]
+ *   clients             已配发客户端表 {<id>: {groups:[], created, tokens:[], secret}}
+ *   producers           生产者注册表 {name: {created, hash, token}}
+ *
+ * 编辑语义（PUT /api/admin/clients、PUT /api/admin/groups）：
+ *   只改客户端归属与令牌绑定，历史消息的 to 不追改（后续投递按新值计算）。
+ *
+ * 历史清理：wrangler.toml 里配了每天北京时间 04:00 的 Cron，触发 scheduled()，
+ *   删掉昨天及更早的消息（只留今天，keepDays=0）；无 ts 的脏数据视为最旧一并清理。
+ *   定时/手动清理结果记在 cleanup:last（概况页可见）。KV 本身另有 7 天 TTL 兜底。
  */
 
 const INDEX_KEY = "index";
@@ -205,6 +212,80 @@ async function loadMessages(env, ids) {
   return out.filter(Boolean);
 }
 
+/* 北京时间(UTC+8，无夏令时)按天清理历史消息 */
+const BEIJING_OFFSET_MS = 8 * 3600 * 1000;
+const DAY_MS = 24 * 3600 * 1000;
+
+/** ts 所在北京时间那天的 00:00（UTC 毫秒） */
+function beijingDayStart(ts) {
+  const day = Math.floor((ts + BEIJING_OFFSET_MS) / DAY_MS);
+  return day * DAY_MS - BEIJING_OFFSET_MS;
+}
+
+function beijingDateStr(ts) {
+  const d = new Date(ts + BEIJING_OFFSET_MS);
+  const p = (n) => String(n).padStart(2, "0");
+  return d.getUTCFullYear() + "-" + p(d.getUTCMonth() + 1) + "-" + p(d.getUTCDate());
+}
+
+/**
+ * 清理历史消息：删除 ts < cutoff 的消息（cutoff = 北京时间今天 00:00 - keepDays 天）。
+ * keepDays=0 即删掉昨天及更早的消息（只留今天）；无 ts 的脏数据视为最旧一并清理。
+ * 同时剔除 index 里已无正文的孤儿 id。dryRun 只统计不删除；非 dryRun 把结果写入 cleanup:last。
+ */
+async function cleanupHistory(env, options) {
+  let keepDays = options && options.keepDays != null ? parseInt(options.keepDays, 10) : 0;
+  if (isNaN(keepDays)) keepDays = 0;
+  keepDays = Math.max(0, Math.min(30, keepDays));
+  const dryRun = !!(options && options.dryRun);
+  const now = Date.now();
+  const cutoff = beijingDayStart(now) - keepDays * DAY_MS;
+  const idx = await readIndex(env);
+  const msgs = await loadMessages(env, idx);
+  const byId = new Map(msgs.map((m) => [m.id, m]));
+  const keep = [];
+  let deleted = 0;
+  let orphans = 0;
+  const byDate = {};
+  for (const id of idx) {
+    const m = byId.get(id);
+    if (!m) { orphans++; continue; } // 孤儿 id：正文已无（过期或脏数据），直接从 index 剔除
+    const ts = typeof m.ts === "number" ? m.ts : 0;
+    if (ts < cutoff) {
+      if (!dryRun) {
+        try { await env.NOTIFY_KV.delete("msg:" + id); } catch (e) { /* 忽略单条失败 */ }
+      }
+      deleted++;
+      const ds = beijingDateStr(ts);
+      byDate[ds] = (byDate[ds] || 0) + 1;
+    } else {
+      keep.push(id);
+    }
+  }
+  const result = {
+    ok: true,
+    dry_run: dryRun,
+    cutoff,
+    cutoff_beijing: beijingDateStr(cutoff) + " 00:00",
+    keep_days: keepDays,
+    checked: idx.length,
+    deleted,
+    orphans,
+    kept: keep.length,
+    by_date: byDate,
+    at: now,
+  };
+  if (!dryRun) {
+    await env.NOTIFY_KV.put(INDEX_KEY, JSON.stringify(keep.slice(-MAX_INDEX)));
+    try {
+      await env.NOTIFY_KV.put("cleanup:last", JSON.stringify({
+        at: now, cutoff, keep_days: keepDays, deleted, orphans, kept: keep.length,
+      }));
+    } catch (e) { /* 忽略 */ }
+  }
+  return result;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -265,14 +346,29 @@ export default {
           created: producers[n].created || 0,
           token: producers[n].token || null, // 老记录轮换后才有
         }));
-        return json({ ok: true, messages: idx.length, clients: clientList, producers: producerList });
+        // 分组汇总：由客户端归属实时聚合（历史消息的 to 不计入、不追改）
+        const groupMap = {};
+        clientList.forEach((c) => {
+          (c.groups || []).forEach((g) => {
+            if (!groupMap[g]) groupMap[g] = [];
+            groupMap[g].push(c.id);
+          });
+        });
+        const groupList = Object.keys(groupMap).sort().map((g) => ({
+          name: g,
+          count: groupMap[g].length,
+          clients: groupMap[g].sort(),
+        }));
+        const lastCleanup = await kvGetJson(env, "cleanup:last", null);
+        return json({ ok: true, messages: idx.length, clients: clientList, producers: producerList, groups: groupList, cleanup: lastCleanup });
       }
 
       if (path === "/api/admin/clients" && request.method === "POST") {
         let body = {};
         try { body = await request.json(); } catch (e) { return json({ ok: false, error: "invalid json" }, 400); }
         const cid = String(body.client_id || "").trim().slice(0, 64);
-        const groups = Array.isArray(body.groups) ? body.groups.map(String).filter(Boolean).slice(0, 20)
+        const hasGroups = body && Object.prototype.hasOwnProperty.call(body, "groups");
+        let groups = Array.isArray(body.groups) ? body.groups.map(String).map((s) => s.trim()).filter(Boolean).slice(0, 20)
           : String(body.groups || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20);
         const rotate = url.searchParams.get("rotate") === "yes";
         if (!cid) return json({ ok: false, error: "client_id required" }, 400);
@@ -280,6 +376,11 @@ export default {
         if (clients[cid] && !rotate) {
           return json({ ok: false, error: "client exists, use ?rotate=yes to rotate secret" }, 409);
         }
+        // 轮换且调用方未传 groups 时保留原分组（修复后台“轮换即清分组”问题）
+        if (clients[cid] && rotate && !hasGroups) {
+          groups = clients[cid].groups || [];
+        }
+        const created = (clients[cid] && clients[cid].created) || Date.now();
         // 轮换时先吊销该客户端旧令牌
         if (clients[cid] && rotate && Array.isArray(clients[cid].tokens)) {
           await Promise.all(clients[cid].tokens.map((h) => env.NOTIFY_KV.delete("auth:" + h).catch(() => {})));
@@ -287,7 +388,7 @@ export default {
         const secret = randomToken("cs");
         const h = await sha256hex(secret);
         await env.NOTIFY_KV.put("auth:" + h, JSON.stringify({ kind: "client", id: cid, groups }));
-        clients[cid] = { groups, created: Date.now(), tokens: [h], secret };
+        clients[cid] = { groups, created, tokens: [h], secret };
         await env.NOTIFY_KV.put("clients", JSON.stringify(clients));
         return json({ ok: true, client_id: cid, groups, secret, note: "密钥已保存，可在管理后台随时查看/复制" });
       }
@@ -302,6 +403,107 @@ export default {
         delete clients[cid];
         await env.NOTIFY_KV.put("clients", JSON.stringify(clients));
         return json({ ok: true, revoked: cid });
+      }
+
+      if (path === "/api/admin/clients" && request.method === "PUT") {
+        // 编辑客户端：改 ID {client_id, new_id} / 改分组 {client_id, groups} / 换密钥 {client_id, rotate:true}（可组合）
+        // 历史消息的 to.clients/to.groups 不追改，只影响后续投递与鉴权。
+        let body = {};
+        try { body = await request.json(); } catch (e) { return json({ ok: false, error: "invalid json" }, 400); }
+        const cid = String(body.client_id || "").trim().slice(0, 64);
+        if (!cid) return json({ ok: false, error: "client_id required" }, 400);
+        const clients = await kvGetJson(env, "clients", {});
+        const rec = clients[cid];
+        if (!rec) return json({ ok: false, error: "client not found" }, 404);
+        const rawNewId = body.new_id != null ? String(body.new_id).trim().slice(0, 64) : "";
+        const finalId = rawNewId || cid;
+        if (finalId !== cid && clients[finalId]) {
+          return json({ ok: false, error: "new_id exists" }, 409);
+        }
+        const hasGroups = body && Object.prototype.hasOwnProperty.call(body, "groups");
+        let finalGroups = rec.groups || [];
+        if (hasGroups) {
+          finalGroups = Array.isArray(body.groups)
+            ? body.groups.map((x) => String(x).trim()).filter(Boolean).slice(0, 20)
+            : String(body.groups || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 20);
+        }
+        const wantRotate = body.rotate === true;
+        if (wantRotate) {
+          if (Array.isArray(rec.tokens)) {
+            await Promise.all(rec.tokens.map((h) => env.NOTIFY_KV.delete("auth:" + h).catch(() => {})));
+          }
+          const secret = randomToken("cs");
+          const h = await sha256hex(secret);
+          await env.NOTIFY_KV.put("auth:" + h, JSON.stringify({ kind: "client", id: finalId, groups: finalGroups }));
+          rec.tokens = [h];
+          rec.secret = secret;
+          rec.groups = finalGroups;
+          if (finalId !== cid) delete clients[cid];
+          clients[finalId] = rec;
+          await env.NOTIFY_KV.put("clients", JSON.stringify(clients));
+          return json({ ok: true, client_id: finalId, groups: finalGroups, secret, rotated: true, renamed: finalId !== cid });
+        }
+        // 不换密钥：就地更新该客户端全部令牌记录的 id/groups（密钥不变）
+        if (Array.isArray(rec.tokens) && rec.tokens.length) {
+          await Promise.all(rec.tokens.map(async (h) => {
+            try {
+              await env.NOTIFY_KV.put("auth:" + h, JSON.stringify({ kind: "client", id: finalId, groups: finalGroups }));
+            } catch (e) { /* 忽略单条失败 */ }
+          }));
+        }
+        rec.groups = finalGroups;
+        if (finalId !== cid) delete clients[cid];
+        clients[finalId] = rec;
+        await env.NOTIFY_KV.put("clients", JSON.stringify(clients));
+        return json({ ok: true, client_id: finalId, groups: finalGroups, secret: rec.secret || null, rotated: false, renamed: finalId !== cid });
+      }
+
+      if (path === "/api/admin/groups" && request.method === "PUT") {
+        // 分组重命名：批量更新组内所有客户端的 groups 及对应令牌记录。历史消息不追改。
+        let body = {};
+        try { body = await request.json(); } catch (e) { return json({ ok: false, error: "invalid json" }, 400); }
+        const oldName = String(body.old_name != null ? body.old_name : (body.old != null ? body.old : "")).trim().slice(0, 64);
+        const newName = String(body.new_name != null ? body.new_name : (body.new != null ? body.new : "")).trim().slice(0, 64);
+        if (!oldName) return json({ ok: false, error: "old_name required" }, 400);
+        if (!newName) return json({ ok: false, error: "new_name required" }, 400);
+        if (oldName === newName) return json({ ok: false, error: "same name" }, 400);
+        const clients = await kvGetJson(env, "clients", {});
+        const affected = [];
+        for (const cid of Object.keys(clients)) {
+          const gs = clients[cid].groups || [];
+          if (!gs.includes(oldName)) continue;
+          const seen = {};
+          const next = [];
+          gs.forEach((g) => {
+            const mapped = g === oldName ? newName : g;
+            if (!seen[mapped]) { seen[mapped] = true; next.push(mapped); }
+          });
+          clients[cid].groups = next.slice(0, 20);
+          affected.push(cid);
+          // 同步该客户端令牌记录中的 groups（密钥不变）
+          if (Array.isArray(clients[cid].tokens)) {
+            for (const h of clients[cid].tokens) {
+              try {
+                const raw = await env.NOTIFY_KV.get("auth:" + h);
+                const old = raw ? JSON.parse(raw) : { kind: "client", id: cid };
+                const og = Array.isArray(old.groups) ? old.groups : [];
+                const nseen = {};
+                const ng = [];
+                og.forEach((g) => {
+                  const mapped = g === oldName ? newName : g;
+                  if (!nseen[mapped]) { nseen[mapped] = true; ng.push(mapped); }
+                });
+                // 兼容令牌记录缺 groups 的情况：以客户端最新分组为准
+                const finalGroups = og.length ? ng.slice(0, 20) : clients[cid].groups;
+                await env.NOTIFY_KV.put("auth:" + h, JSON.stringify({ kind: "client", id: old.id || cid, groups: finalGroups }));
+              } catch (e) { /* 忽略单条失败 */ }
+            }
+          }
+        }
+        if (!affected.length) return json({ ok: false, error: "group not found" }, 404);
+        affected.sort();
+        await env.NOTIFY_KV.put("clients", JSON.stringify(clients));
+        return json({ ok: true, old: oldName, new: newName, affected, count: affected.length });
       }
 
       if (path === "/api/admin/producers" && request.method === "POST") {
@@ -366,6 +568,20 @@ export default {
         delete producers[name];
         await env.NOTIFY_KV.put("producers", JSON.stringify(producers));
         return json({ ok: true, revoked: name });
+      }
+
+      if (path === "/api/admin/cleanup" && request.method === "POST") {
+        // 手动清理历史消息：{keep_days?: 0-30, dry_run?: true}；keep_days=0 即只留今天（删昨天及更早）
+        let body = {};
+        try { body = await request.json(); } catch (e) { return json({ ok: false, error: "invalid json" }, 400); }
+        let keepDays = 0;
+        if (body.keep_days != null) {
+          keepDays = parseInt(body.keep_days, 10);
+          if (isNaN(keepDays)) return json({ ok: false, error: "keep_days must be 0-30" }, 400);
+          keepDays = Math.max(0, Math.min(30, keepDays));
+        }
+        const result = await cleanupHistory(env, { keepDays, dryRun: body.dry_run === true });
+        return json(result);
       }
 
       return json({ ok: false, error: "not found" }, 404);
@@ -449,5 +665,16 @@ export default {
     }
 
     return json({ ok: false, error: "not found" }, 404);
+  },
+
+  async scheduled(event, env, ctx) {
+    // 定时清理（cron 见 wrangler.toml，按 UTC 配置，对应北京时间每天 04:00）：
+    // 删掉昨天及更早的历史消息，只留今天。
+    try {
+      const r = await cleanupHistory(env, { keepDays: 0 });
+      console.log("[cleanup] deleted=" + r.deleted + " orphans=" + r.orphans + " kept=" + r.kept + " cutoff=" + r.cutoff_beijing);
+    } catch (e) {
+      console.log("[cleanup] failed: " + (e && e.message));
+    }
   },
 };
